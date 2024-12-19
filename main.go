@@ -1,194 +1,196 @@
-// ("7605031210:AAGTiIboCT3mxxLO6egJ3Zhkr8LAVcdu6yo")
-// https://github.com/kudmit/florgalerie_bot.git
 package main
 
 import (
+	"fmt"
 	"log"
-	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// Локализованное сообщение о сохранении букета
-func sendBouquetSavedMessage(bot *tgbotapi.BotAPI, chatID int64, lang string, details string) {
-	var message string
-	switch lang {
-	case "DEU":
-		message = "Ihr Strauß wurde gespeichert: " + details
-	case "EN":
-		message = "Your bouquet has been saved: " + details
-	case "UK":
-		message = "Ваш букет збережено: " + details
-	case "RU":
-		message = "Ваш букет сохранен: " + details
-	}
-	msg := tgbotapi.NewMessage(chatID, message)
+const AdminID int64 = 246690184
+
+// Информация о пользователе
+type UserInfo struct {
+	Language         string
+	Bouquet          string
+	OrderTime        string
+	LastAdminMessage string
+	UserName         string // Имя пользователя или "Анонимный пользователь"
+}
+
+// Отправка информации админу
+func sendUpdatedInfoToAdmin(bot *tgbotapi.BotAPI, chatID int64, userInfo UserInfo) {
+	// Формируем кликабельный ID пользователя
+	clickableID := fmt.Sprintf("<a href=\"tg://user?id=%d\">%d</a>", chatID, chatID)
+
+	// Формируем основное сообщение со всей информацией
+	message := fmt.Sprintf(
+		"👤 Пользователь: %s\n🌍 Язык: %s\n📝 Имя: %s\n💐 Букет: %s\n⏰ Время заказа: %s",
+		clickableID,        // Кликабельный ID
+		userInfo.Language,  // Язык пользователя
+		userInfo.UserName,  // Имя пользователя
+		userInfo.Bouquet,   // Букет
+		userInfo.OrderTime, // Время заказа
+	)
+
+	// Отправляем основное сообщение админу
+	msg := tgbotapi.NewMessage(AdminID, message)
+	msg.ParseMode = "HTML" // Используем HTML для кликабельных ссылок
 	bot.Send(msg)
+
+	// Отправляем ID пользователя отдельно
+	idMessage := fmt.Sprintf(" %d", chatID)
+	bot.Send(tgbotapi.NewMessage(AdminID, idMessage))
+}
+
+// Пересылка сообщения от администратора пользователю
+func handleAdminMessage(bot *tgbotapi.BotAPI, update tgbotapi.Update, userData map[int64]*UserInfo) {
+	message := update.Message
+
+	// Если администратор отправил фотографию
+	if message.Photo != nil {
+		parts := strings.SplitN(message.Caption, " ", 2) // Используем Caption для ID пользователя
+		if len(parts) < 1 {
+			bot.Send(tgbotapi.NewMessage(AdminID, "❗ Укажите ID пользователя в подписи к фото."))
+			return
+		}
+
+		userIDStr := parts[0]
+		userID, err := strconv.ParseInt(userIDStr, 10, 64)
+		if err != nil {
+			bot.Send(tgbotapi.NewMessage(AdminID, "❗ Неверный формат ID пользователя в подписи."))
+			return
+		}
+
+		photo := message.Photo[len(message.Photo)-1] // Берём самое большое фото
+		photoMsg := tgbotapi.NewPhoto(userID, tgbotapi.FileID(photo.FileID))
+		photoMsg.Caption = "📸 Фото от администратора"
+		_, err = bot.Send(photoMsg)
+		if err != nil {
+			bot.Send(tgbotapi.NewMessage(AdminID, fmt.Sprintf("❌ Не удалось отправить фото пользователю: %v", err)))
+		} else {
+			// Сохраняем сообщение администратора для пользователя
+			if userInfo, exists := userData[userID]; exists {
+				userInfo.LastAdminMessage = "📸 Фото от администратора"
+			}
+			bot.Send(tgbotapi.NewMessage(AdminID, "✅ Фото отправлено пользователю."))
+		}
+		return
+	}
+
+	// Обработка текстовых сообщений
+	text := message.Text
+	parts := strings.SplitN(text, " ", 2)
+	if len(parts) < 2 {
+		bot.Send(tgbotapi.NewMessage(AdminID, "❗ Укажите ID пользователя и текст сообщения через пробел."))
+		return
+	}
+
+	userIDStr := parts[0]
+	userID, err := strconv.ParseInt(userIDStr, 10, 64)
+	if err != nil {
+		bot.Send(tgbotapi.NewMessage(AdminID, "❗ Неверный формат ID пользователя."))
+		return
+	}
+
+	messageText := parts[1]
+	if messageText == "" {
+		bot.Send(tgbotapi.NewMessage(AdminID, "❗ Текст сообщения пустой."))
+		return
+	}
+
+	msg := tgbotapi.NewMessage(userID, fmt.Sprintf("🔔 Admin:\n%s", messageText))
+	_, err = bot.Send(msg)
+	if err != nil {
+		bot.Send(tgbotapi.NewMessage(AdminID, fmt.Sprintf("❌ Не удалось отправить сообщение пользователю: %v", err)))
+	} else {
+		// Сохраняем текст последнего сообщения администратора
+		if userInfo, exists := userData[userID]; exists {
+			userInfo.LastAdminMessage = messageText
+		}
+		bot.Send(tgbotapi.NewMessage(AdminID, "✅ Сообщение отправлено пользователю."))
+	}
 }
 
 // Приветствие
 func sendGreeting(bot *tgbotapi.BotAPI, chatID int64, lang string) {
-	var greeting, nextButton string
+	var greeting string
 	switch lang {
 	case "DEU":
-		greeting = "Willkommen in unserem Geschäft 💐Florgalerie!"
-		nextButton = "Weiter!"
+		greeting = "Willkommen in unserer Blumenboutique Florgalerie💐! Ich bin Max, ein Bot🤖, der Ihnen bei der Bestellung eines Blumenstraußes hilft, und unsere aufmerksamen Administratoren unterstützen Sie bei speziellen Anliegen! Wir verfolgen einen ausschließlich individuellen Ansatz für unsere Kunden, daher gibt es bei uns keine standardisierten oder vorgefertigten Sträuße."
 	case "EN":
-		greeting = "Welcome to our store 💐Florgalerie!"
-		nextButton = "Next!"
+		greeting = "Welcome to our flower boutique Florgalerie💐! My name is Max, a bot🤖 designed to assist you with ordering a bouquet, and our attentive administrators will help you with any unique requests! We take an exclusively individual approach to our clients, which is why we don't offer standardized or pre-made bouquets."
 	case "UK":
-		greeting = "Ласкаво просимо до нашого магазину 💐Florgalerie!"
-		nextButton = "Далі!"
+		greeting = "Вітаємо Вас у нашому квітковому бутіку Florgalerie💐! Мене звати Макс, я бот🤖, створений для допомоги Вам із замовленням букета, а наші чуйні адміністратори допоможуть Вам із нетиповими запитаннями! Ми дотримуємося виключно індивідуального підходу до клієнтів, тому у нас відсутні типові або вже готові букети."
 	case "RU":
-		greeting = "Приветствуем Вас в нашем магазине 💐Florgalerie!"
-		nextButton = "Далее!"
+		greeting = "Приветствуем Вас в нашем цветочном бутике Florgalerie💐! Меня зовут Макс, я бот🤖, созданный для помощи Вам с заказом букета, а наши чуткие администраторы помогут Вам с нетиповыми вопросами! У нас исключительно индивидуальный подход к клиентам, поэтому отсутствуют типовые-уже скомпонованные букеты."
 	}
 
-	buttons := tgbotapi.NewReplyKeyboard(
-		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButton(nextButton),
-		),
-	)
 	msg := tgbotapi.NewMessage(chatID, greeting)
-	msg.ReplyMarkup = buttons
 	bot.Send(msg)
 }
 
-// Вопрос о букете или создании
-func sendQuestion(bot *tgbotapi.BotAPI, chatID int64, lang string) {
-	var question, button1, button2 string
+func askUserName(bot *tgbotapi.BotAPI, chatID int64, lang string) {
+	var message, anonymousButton string
 	switch lang {
 	case "DEU":
-		question = "Möchten Sie einen Blumenstrauß auswählen oder Ihren eigenen zusammenstellen?"
-		button1 = "Auswählen!"
-		button2 = "Mein eigener Strauß!"
+		message = "Wie können wir Sie ansprechen?"
+		anonymousButton = "Anonym bleiben"
 	case "EN":
-		question = "Would you like to choose a bouquet or create your own?"
-		button1 = "Choose!"
-		button2 = "Create my own!"
+		message = "How should we address you?"
+		anonymousButton = "Stay anonymous"
 	case "UK":
-		question = "Хотіли б ви вибрати букет або створити власний?"
-		button1 = "Вибрати!"
-		button2 = "Створити свій!"
+		message = "Як ми можемо до Вас звертатися?"
+		anonymousButton = "Залишитися анонімним"
 	case "RU":
-		question = "Вы хотите выбрать букет или создать свой собственный?"
-		button1 = "Выбрать!"
-		button2 = "Создать свой!"
+		message = "Как мы можем к Вам обращаться?"
+		anonymousButton = "Остаться анонимным"
 	}
 
 	buttons := tgbotapi.NewReplyKeyboard(
 		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButton(button1),
-			tgbotapi.NewKeyboardButton(button2),
+			tgbotapi.NewKeyboardButton(anonymousButton),
 		),
 	)
-	msg := tgbotapi.NewMessage(chatID, question)
+	msg := tgbotapi.NewMessage(chatID, message)
 	msg.ReplyMarkup = buttons
 	bot.Send(msg)
 }
 
-// Сообщение для выбора букета
-func sendBouquetChoiceMessage(bot *tgbotapi.BotAPI, chatID int64, lang string) {
+// Запрос описания букета
+func sendBouquetRequest(bot *tgbotapi.BotAPI, chatID int64, lang string) {
 	var message string
 	switch lang {
 	case "DEU":
-		message = "Bitte wählen Sie einen Blumenstrauß aus unserem Telegram-Kanal aus (z. B.: #123)."
+		message = "Beschreiben Sie bitte den gewünschten Blumenstrauß:"
 	case "EN":
-		message = "Please choose a bouquet from our Telegram channel (e.g., #123)."
+		message = "Please describe the bouquet you would like:"
 	case "UK":
-		message = "Будь ласка, виберіть букет з нашого Telegram-каналу (наприклад: #123)."
+		message = "Опишіть, будь ласка, букет, який ви хотіли б:"
 	case "RU":
-		message = "Пожалуйста, выберите букет из нашего Telegram-канала (например: #123)."
+		message = "Опишите, пожалуйста, букет, который вы хотели бы:"
 	}
 	msg := tgbotapi.NewMessage(chatID, message)
 	bot.Send(msg)
 }
 
-// Сообщение для составления собственного букета
-func sendCustomBouquetMessage(bot *tgbotapi.BotAPI, chatID int64, lang string) {
-	var message string
+// График работы магазина
+func sendSchedule(bot *tgbotapi.BotAPI, chatID int64, lang string) {
+	var schedule string
 	switch lang {
 	case "DEU":
-		message = "Bitte beschreiben Sie die Zusammensetzung Ihres Straußes - Namen der Blumen und ihre Anzahl."
+		schedule = "Arbeitszeiten:\nMontag-Freitag: 9:00 - 21:00\nSamstag: 8:00 - 19:00\nSonntag: 9:00 - 15:00"
 	case "EN":
-		message = "Please describe the composition of your bouquet - flower names and their quantities."
+		schedule = "Working hours:\nMonday-Friday: 9:00 - 21:00\nSaturday: 8:00 - 19:00\nSunday: 9:00 - 15:00"
 	case "UK":
-		message = "Будь ласка, опишіть склад вашого букета - назви квітів та їх кількість."
+		schedule = "Графік роботи:\nПонеділок-П’ятниця: 9:00 - 21:00\nСубота: 8:00 - 19:00\nНеділя: 9:00 - 15:00"
 	case "RU":
-		message = "Пожалуйста, опишите состав букета — названия цветов и их количество."
+		schedule = "График работы:\nПонедельник-Пятница: 9:00 - 21:00\nСуббота: 8:00 - 19:00\nВоскресенье: 9:00 - 15:00"
 	}
-	msg := tgbotapi.NewMessage(chatID, message)
-	bot.Send(msg)
-}
-
-// Случай нескольких букетов
-func sendSingleOrMultipleQuestion(bot *tgbotapi.BotAPI, chatID int64, lang string) {
-	var question, singleButton, multipleButton string
-	switch lang {
-	case "DEU":
-		question = "Möchten Sie einen oder mehrere Sträuße bestellen?"
-		singleButton = "Nur einen"
-		multipleButton = "Mehrere Sträuße"
-	case "EN":
-		question = "Would you like to order one or multiple bouquets?"
-		singleButton = "Just one"
-		multipleButton = "Multiple bouquets"
-	case "UK":
-		question = "Хотіли б ви замовити один чи кілька букетів?"
-		singleButton = "Тільки один"
-		multipleButton = "Кілька букетів"
-	case "RU":
-		question = "Хотели бы вы заказать один или несколько букетов?"
-		singleButton = "Только один"
-		multipleButton = "Несколько букетов"
-	}
-
-	buttons := tgbotapi.NewReplyKeyboard(
-		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButton(singleButton),
-			tgbotapi.NewKeyboardButton(multipleButton),
-		),
-	)
-	msg := tgbotapi.NewMessage(chatID, question)
-	msg.ReplyMarkup = buttons
-	bot.Send(msg)
-}
-func sendPackagingQuestion(bot *tgbotapi.BotAPI, chatID int64, lang string) {
-	var question, craftPaper, coloredWrap, noWrap string
-	switch lang {
-	case "DEU":
-		question = "Bitte wählen Sie eine Verpackung:"
-		craftPaper = "Kraftpapier"
-		coloredWrap = "Bunte Verpackung"
-		noWrap = "Ohne Verpackung"
-	case "EN":
-		question = "Please choose a packaging:"
-		craftPaper = "Craft paper"
-		coloredWrap = "Colored wrap"
-		noWrap = "No packaging"
-	case "UK":
-		question = "Оберіть, будь ласка, упаковку:"
-		craftPaper = "Крафтовий папір"
-		coloredWrap = "Кольорова упаковка"
-		noWrap = "Упаковка не потрiбна"
-	case "RU":
-		question = "Выберите пожалуйста упаковку:"
-		craftPaper = "Крафтовая бумага"
-		coloredWrap = "Цветная упаковка"
-		noWrap = "Без упаковки"
-	}
-
-	buttons := tgbotapi.NewReplyKeyboard(
-		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButton(craftPaper),
-			tgbotapi.NewKeyboardButton(coloredWrap),
-			tgbotapi.NewKeyboardButton(noWrap),
-		),
-	)
-	msg := tgbotapi.NewMessage(chatID, question)
-	msg.ReplyMarkup = buttons
+	msg := tgbotapi.NewMessage(chatID, schedule)
 	bot.Send(msg)
 }
 
@@ -197,123 +199,13 @@ func sendOrderTimeRequest(bot *tgbotapi.BotAPI, chatID int64, lang string) {
 	var message string
 	switch lang {
 	case "DEU":
-		message = "Bitte geben Sie Datum und Uhrzeit ein, zu der Ihre Bestellung fertig sein soll (z. B. 2023-12-31 15:30)."
+		message = "Bitte geben Sie das Datum und die Uhrzeit Ihrer Buchung im Format 'TT.MM.JJJJ HH:MM' ein. (z.B. 31.12.2024 15:30)."
 	case "EN":
-		message = "Please enter the date and time by which your order should be ready (e.g., 2023-12-31 15:30)."
+		message = "Please enter the date and time of your order in the format 'DD.MM.YYYY HH:MM' (e.g., 31.12.2024 15:30)."
 	case "UK":
-		message = "Будь ласка, введіть дату та час, до якого ваше замовлення має бути готове (наприклад: 2023-12-31 15:30)."
+		message = "Будь ласка, введіть дату і час Вашого замовлення у форматі 'ДД.ММ.ГГГГ ЧЧ:ММ' (наприклад: 31.12.2024 15:30)."
 	case "RU":
-		message = "Введите дату и время срока, к которому должен быть готов Ваш заказ (например: 2023-12-31 15:30)."
-	}
-	msg := tgbotapi.NewMessage(chatID, message)
-	bot.Send(msg)
-}
-func sendStoreClosedOptions(bot *tgbotapi.BotAPI, chatID int64, lang string, nextDay time.Time) {
-	var message, returnButton, nextDayButton string
-	switch lang {
-	case "DEU":
-		message = "Leider ist das Geschäft zu dieser Zeit geschlossen. Sie können Ihre Bestellung um " + nextDay.Format("2006-01-02 08:00") + " abholen oder eine andere Zeit eingeben."
-		returnButton = "Zurück zur Zeitauswahl"
-		nextDayButton = "Möglichst früh morgen abholen"
-	case "EN":
-		message = "The store is closed at this time. You can pick up your order at " + nextDay.Format("2006-01-02 08:00") + " or enter a new time."
-		returnButton = "Return to time selection"
-		nextDayButton = "Get as soon as possible tomorrow"
-	case "UK":
-		message = "Магазин закритий у цей час. Ви можете забрати замовлення о " + nextDay.Format("2006-01-02 08:00") + " або ввести інший час."
-		returnButton = "Повернутися до вибору часу"
-		nextDayButton = "Забрати якнайшвидше завтра"
-	case "RU":
-		message = "Магазин закрыт в это время. Вы можете забрать заказ в " + nextDay.Format("2006-01-02 08:00") + " или выбрать другое время."
-		returnButton = "Вернуться к выбору времени"
-		nextDayButton = "Получить как можно скорее завтра"
-	}
-
-	buttons := tgbotapi.NewReplyKeyboard(
-		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButton(returnButton),
-			tgbotapi.NewKeyboardButton(nextDayButton),
-		),
-	)
-	msg := tgbotapi.NewMessage(chatID, message)
-	msg.ReplyMarkup = buttons
-	bot.Send(msg)
-}
-
-// Логика обработки времени
-func handleOrderTime(bot *tgbotapi.BotAPI, chatID int64, input string, lang string, userData map[int64]map[string]string) {
-	loc, _ := time.LoadLocation("Europe/Vienna")
-	currentTime := time.Now().In(loc)
-
-	parsedTime, err := time.ParseInLocation("2006-01-02 15:04", input, loc)
-	if err != nil {
-		sendInvalidTimeMessage(bot, chatID, lang)
-		return
-	}
-
-	if parsedTime.Before(currentTime) {
-		sendInvalidTimeMessage(bot, chatID, lang)
-		return
-	}
-
-	if !isWithinWorkingHours(parsedTime) {
-		// Если магазин закрыт, предложить варианты
-		nextDay := time.Date(parsedTime.Year(), parsedTime.Month(), parsedTime.Day()+1, 8, 0, 0, 0, loc)
-		sendStoreClosedOptions(bot, chatID, lang, nextDay)
-		return
-	}
-
-	// Сохраняем корректное время
-	userData[chatID]["time"] = parsedTime.Format("2006-01-02 15:04")
-	sendOrderTimeSavedMessage(bot, chatID, lang)
-}
-
-// Сообщение о некорректном времени
-func sendInvalidTimeMessage(bot *tgbotapi.BotAPI, chatID int64, lang string) {
-	var message string
-	switch lang {
-	case "DEU":
-		message = "Ungültige Eingabezeit."
-	case "EN":
-		message = "Invalid time input."
-	case "UK":
-		message = "Некоректний час."
-	case "RU":
-		message = "Некорректный ввод времени."
-	}
-	msg := tgbotapi.NewMessage(chatID, message)
-	bot.Send(msg)
-}
-
-// Сообщение о закрытом магазине
-func sendClosedMessage(bot *tgbotapi.BotAPI, chatID int64, lang string) {
-	var message string
-	switch lang {
-	case "DEU":
-		message = "Leider ist das Geschäft zu dieser Zeit geschlossen. Bitte wählen Sie eine Zeit während der Öffnungszeiten."
-	case "EN":
-		message = "The store is closed at that time. Please choose a time during business hours."
-	case "UK":
-		message = "Магазин зачинений у цей час. Будь ласка, оберіть час у межах робочих годин."
-	case "RU":
-		message = "Магазин закрыт в это время. Пожалуйста, выберите время в рамках рабочего времени."
-	}
-	msg := tgbotapi.NewMessage(chatID, message)
-	bot.Send(msg)
-}
-
-// Сообщение о сохранении времени
-func sendOrderTimeSavedMessage(bot *tgbotapi.BotAPI, chatID int64, lang string) {
-	var message string
-	switch lang {
-	case "DEU":
-		message = "Ihre Bestellzeit wurde gespeichert."
-	case "EN":
-		message = "Your order time has been saved."
-	case "UK":
-		message = "Час вашого замовлення збережено."
-	case "RU":
-		message = "Время вашего заказа сохранено."
+		message = "Пожалуйста, введите дату и время Вашего заказа в формате 'ДД.ММ.ГГГГ ЧЧ:ММ' (например: 31.12.2024 15:30)."
 	}
 	msg := tgbotapi.NewMessage(chatID, message)
 	bot.Send(msg)
@@ -323,168 +215,201 @@ func sendOrderTimeSavedMessage(bot *tgbotapi.BotAPI, chatID int64, lang string) 
 func isWithinWorkingHours(t time.Time) bool {
 	weekday := t.Weekday()
 	hour := t.Hour()
-
-	if weekday >= time.Monday && weekday <= time.Friday {
-		return hour >= 9 && hour <= 21
+	switch weekday {
+	case time.Monday, time.Tuesday, time.Wednesday, time.Thursday, time.Friday:
+		return hour >= 9 && hour < 21
+	case time.Saturday:
+		return hour >= 8 && hour < 19
+	case time.Sunday:
+		return hour >= 9 && hour < 15
+	default:
+		return false
 	}
-
-	if weekday == time.Saturday || weekday == time.Sunday {
-		return hour >= 9 && hour <= 15
-	}
-
-	return false
 }
-func sendOrderConfirmation(bot *tgbotapi.BotAPI, chatID int64, lang string, userData map[int64]map[string]string) {
-	order := userData[chatID]
 
-	// Локализованные тексты для сообщения
-	var confirmationMessage, nextButton string
+// Сообщение, если магазин закрыт
+func sendStoreClosedOptions(bot *tgbotapi.BotAPI, chatID int64, lang string, selectedTime time.Time) {
+	loc := selectedTime.Location()
+	nextDay := selectedTime.AddDate(0, 0, 1)
+	nextDayMorning := time.Date(nextDay.Year(), nextDay.Month(), nextDay.Day(), 9, 0, 0, 0, loc)
+
+	var message, tryAgainButton, nextDayButton string
 	switch lang {
 	case "DEU":
-		confirmationMessage = "Bitte bestätigen Sie Ihre Bestellung:\n"
-		nextButton = "Weiter!"
+		message = "Das Geschäft ist zu dieser Zeit geschlossen. Wählen Sie eine Option:"
+		tryAgainButton = "Neue Zeit eingeben"
+		nextDayButton = fmt.Sprintf("Am %02d.%02d um %02d:%02d erhalten", nextDayMorning.Day(), nextDayMorning.Month(), 9, 0)
 	case "EN":
-		confirmationMessage = "Please confirm your order:\n"
-		nextButton = "Next!"
+		message = "The store is closed at this time. Choose an option:"
+		tryAgainButton = "Enter a new time"
+		nextDayButton = fmt.Sprintf("Receive on %02d.%02d at %02d:%02d", nextDayMorning.Day(), nextDayMorning.Month(), 9, 0)
 	case "UK":
-		confirmationMessage = "Будь ласка, підтвердіть ваше замовлення:\n"
-		nextButton = "Далі!"
+		message = "Магазин зачинений у цей час. Оберіть опцію:"
+		tryAgainButton = "Ввести новий час"
+		nextDayButton = fmt.Sprintf("Отримати %02d.%02d о %02d:%02d", nextDayMorning.Day(), nextDayMorning.Month(), 9, 0)
 	case "RU":
-		confirmationMessage = "Пожалуйста, подтвердите ваш заказ:\n"
-		nextButton = "Далее!"
-	}
-
-	// Формируем сообщение с деталями заказа
-	confirmationMessage += "🕒 Время: " + order["time"] + "\n"
-	confirmationMessage += "💐 Букет: " + order["bouquet"] + "\n"
-	confirmationMessage += "📦 Упаковка: " + order["packaging"] + "\n"
-	confirmationMessage += "📊 Количество: " + order["quantity"] + "\n"
-
-	// Кнопка "Далее"
-	buttons := tgbotapi.NewReplyKeyboard(
-		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButton(nextButton),
-		),
-	)
-
-	// Отправка сообщения
-	msg := tgbotapi.NewMessage(chatID, confirmationMessage)
-	msg.ReplyMarkup = buttons
-	bot.Send(msg)
-}
-func sendPaymentMethodQuestion(bot *tgbotapi.BotAPI, chatID int64, lang string) {
-	var message, prepaidButton, nonPrepaidButton string
-	switch lang {
-	case "DEU":
-		message = "Möchten Sie den Strauß mit Vorauszahlung oder ohne Vorauszahlung kaufen?"
-		prepaidButton = "Mit Vorauszahlung"
-		nonPrepaidButton = "Ohne Vorauszahlung"
-	case "EN":
-		message = "Would you like to buy the bouquet with prepayment or without prepayment?"
-		prepaidButton = "With prepayment"
-		nonPrepaidButton = "Without prepayment"
-	case "UK":
-		message = "Хочете купити букет з передоплатою чи без передоплати?"
-		prepaidButton = "З передоплатою"
-		nonPrepaidButton = "Без передоплати"
-	case "RU":
-		message = "Хотите купить букет с предоплатой или без предоплаты?"
-		prepaidButton = "С предоплатой"
-		nonPrepaidButton = "Без предоплаты"
+		message = "Магазин закрыт в это время. Выберите вариант:"
+		tryAgainButton = "Ввести новое время"
+		nextDayButton = fmt.Sprintf("Получить %02d.%02d в %02d:%02d", nextDayMorning.Day(), nextDayMorning.Month(), 9, 0)
 	}
 
 	buttons := tgbotapi.NewReplyKeyboard(
 		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButton(prepaidButton),
-			tgbotapi.NewKeyboardButton(nonPrepaidButton),
+			tgbotapi.NewKeyboardButton(tryAgainButton),
+			tgbotapi.NewKeyboardButton(nextDayButton),
 		),
 	)
-
 	msg := tgbotapi.NewMessage(chatID, message)
 	msg.ReplyMarkup = buttons
 	bot.Send(msg)
 }
 
-func getApproximateDateTime(orderTime string) string {
-	parsedTime, err := time.Parse("2006-01-02 15:04", orderTime)
-	if err != nil {
-		return orderTime // Если ошибка, возвращаем исходное время
-	}
-	approxTime := parsedTime.Add(3 * time.Minute) // Добавляем 3 минуты
-	return approxTime.Format("2006-01-02 15:04")  // Возвращаем дату и время в формате YYYY-MM-DD HH:MM
-}
+// Сообщение при некорректном времени
+func sendInvalidTimeMessage(bot *tgbotapi.BotAPI, chatID int64, lang string) {
+	loc, _ := time.LoadLocation("Europe/Vienna")
+	currentTime := time.Now().In(loc)
 
-func sendPrepaymentDetails(bot *tgbotapi.BotAPI, chatID int64, lang string) {
 	var message string
 	switch lang {
 	case "DEU":
-		message = "Sie können die Bestellung mit diesen Angaben bezahlen: AT 1234567890. Bei Vorauszahlung wird Ihr Strauß pünktlich fertig!"
+		message = fmt.Sprintf("Sie haben die Uhrzeit falsch eingegeben, bitte korrigieren Sie sie. Aktuelle Uhrzeit: %s. Bitte geben Sie die Zeit erneut ein.", currentTime.Format("02.01.2006 15:04"))
 	case "EN":
-		message = "You can pay for the order using these details: AT 1234567890. With prepayment, your bouquet will be ready on time!"
+		message = fmt.Sprintf("You have entered the time incorrectly, please correct it. Present time: %s. Please try again.", currentTime.Format("02.01.2006 15:04"))
 	case "UK":
-		message = "Ви можете оплатити замовлення за цими реквізитами: AT 1234567890. При внесенні передоплати ваш букет буде готовий вчасно!"
+		message = fmt.Sprintf("Ви ввели час некоректно, будь ласка, виправте його. Теперішній час: %s. Спробуйте ще раз.", currentTime.Format("02.01.2006 15:04"))
 	case "RU":
-		message = "Вы можете оплатить заказ по этим реквизитам: AT 1234567890. При внесении предоплаты ваш букет будет готов точно в срок!"
+		message = fmt.Sprintf("Вы ввели время некорректно, пожалуйста исправьте его. Настоящее время: %s. Попробуйте снова.", currentTime.Format("02.01.2006 15:04"))
 	}
-	bot.Send(tgbotapi.NewMessage(chatID, message))
+	msg := tgbotapi.NewMessage(chatID, message)
+	bot.Send(msg)
 }
 
-func sendNoPrepaymentDetails(bot *tgbotapi.BotAPI, chatID int64, lang string, userData map[int64]map[string]string) {
-	approxDateTime := getApproximateDateTime(userData[chatID]["time"])
-	var message string
+// Обработка кнопки "Следующий день"
+func handleNextDaySelection(bot *tgbotapi.BotAPI, chatID int64, lang string, userInfo *UserInfo) {
+	loc, _ := time.LoadLocation("Europe/Vienna")
+	nextDay := time.Now().In(loc).Add(24 * time.Hour)
+	nextDayMorning := time.Date(nextDay.Year(), nextDay.Month(), nextDay.Day(), 9, 0, 0, 0, loc)
+
+	// Сохраняем время в формате "дд.мм.гггг чч:мм"
+	userInfo.OrderTime = nextDayMorning.Format("02.01.2006 15:04")
+	sendUpdatedInfoToAdmin(bot, chatID, *userInfo)
+
+	var successMessage string
 	switch lang {
 	case "DEU":
-		message = "Die endgültige Komposition des Straußes dauert noch einige Minuten nach der Zahlung in unserem Geschäft. Vielen Dank für Ihre Bestellung!\n"
-		message += "⏳ Ungefähre Fertigstellungszeit nach der Zahlung: " + approxDateTime
+		successMessage = fmt.Sprintf("Ihre Bestellzeit wurde gespeichert: %02d.%02d um 09:00!", nextDay.Day(), nextDay.Month())
 	case "EN":
-		message = "The final bouquet arrangement will take a few more minutes after payment in our store. Thank you for your order!\n"
-		message += "⏳ Approximate order readiness time after payment: " + approxDateTime
+		successMessage = fmt.Sprintf("Your order time has been saved: %02d.%02d at 09:00!", nextDay.Day(), nextDay.Month())
 	case "UK":
-		message = "Остаточне складання букета займе ще кілька хвилин після оплати в нашому магазині. Дякуємо за ваше замовлення!\n"
-		message += "⏳ Приблизний час готовності замовлення після оплати: " + approxDateTime
+		successMessage = fmt.Sprintf("Ваш час замовлення збережено: %02d.%02d о 09:00!", nextDay.Day(), nextDay.Month())
 	case "RU":
-		message = "Финальная компоновка букета займет еще несколько минут после оплаты в нашем магазине. Благодарим вас за сделанный заказ!\n"
-		message += "⏳ Примерное время готовности заказа после оплаты: " + approxDateTime
+		successMessage = fmt.Sprintf("Ваше время заказа сохранено: %02d.%02d в 09:00!", nextDay.Day(), nextDay.Month())
 	}
-	bot.Send(tgbotapi.NewMessage(chatID, message))
+
+	msg := tgbotapi.NewMessage(chatID, successMessage)
+	msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+	bot.Send(msg)
 }
 
-func sendThankYouMessage(bot *tgbotapi.BotAPI, chatID int64, lang string) {
-	var message string
-	switch lang {
-	case "DEU":
-		message = "Vielen Dank, dass Sie uns gewählt haben, Ihre Bestellung wird bereits bearbeitet! ☺️ Verwenden Sie @florgalerie_bot 🤖 für eine erneute Bestellung!"
-	case "EN":
-		message = "Thank you for choosing us, your order is already in progress! ☺️ Use @florgalerie_bot 🤖 to reorder!"
-	case "UK":
-		message = "Дякуємо, що Ви обрали нас, Ваше замовлення вже в процесі приготування! ☺️ Використовуйте @florgalerie_bot 🤖 для повторного замовлення!"
-	case "RU":
-		message = "Благодарим, что Вы выбрали нас, Ваш заказ уже в процессе приготовления! ☺️ Используйте @florgalerie_bot 🤖 для повторного заказа!"
-	}
-	bot.Send(tgbotapi.NewMessage(chatID, message))
-}
+// Обработка времени
+func handleOrderTime(bot *tgbotapi.BotAPI, chatID int64, input string, lang string, userInfo *UserInfo) {
+	loc, _ := time.LoadLocation("Europe/Vienna")
+	currentTime := time.Now().In(loc)
 
-func sendOrderDetailsToAdmin(bot *tgbotapi.BotAPI, adminChatID int64, userChatID int64, userData map[int64]map[string]string) {
-	order, exists := userData[userChatID]
-	if !exists {
-		log.Printf("No order data found for user: %d", userChatID)
+	// Проверяем, нажата ли кнопка "Ввести время повторно"
+	if strings.Contains(input, "Ввести новое время") || strings.Contains(input, "Enter a new time") ||
+		strings.Contains(input, "Ввести новий час") || strings.Contains(input, "Neue Zeit eingeben") {
+		sendOrderTimeRequest(bot, chatID, lang) // Отправляем запрос на ввод времени
 		return
 	}
 
-	// Формируем сообщение с информацией о заказе
-	message := "Новый заказ от пользователя:\n"
-	message += "📞 Chat ID: " + strconv.FormatInt(userChatID, 10) + "\n"
-	message += "💐 Букет: " + order["bouquet"] + "\n"
-	message += "📦 Упаковка: " + order["packaging"] + "\n"
-	message += "📊 Количество: " + order["quantity"] + "\n"
-	message += "⏳ Время: " + order["time"] + "\n"
+	// Проверяем, нажата ли кнопка "Получить на следующий день"
+	// Проверяем, нажата ли кнопка "Получить на следующий день"
+	if strings.Contains(input, "Получить") || strings.Contains(input, "Receive") ||
+		strings.Contains(input, "Отримати") || strings.Contains(input, "Erhalten") {
+		nextDay := currentTime.AddDate(0, 0, 1)
+		nextDayMorning := time.Date(nextDay.Year(), nextDay.Month(), nextDay.Day(), 9, 0, 0, 0, loc)
 
-	// Отправляем сообщение администратору
-	msg := tgbotapi.NewMessage(adminChatID, message)
-	_, err := bot.Send(msg)
-	if err != nil {
-		log.Printf("Failed to send order details to admin: %v", err)
+		// Сохраняем корректное время в формате "дд.мм.гггг чч:мм"
+		userInfo.OrderTime = nextDayMorning.Format("02.01.2006 15:04")
+		sendUpdatedInfoToAdmin(bot, chatID, *userInfo)
+
+		// Сообщение пользователю о сохранённом времени
+		var successMessage string
+		switch lang {
+		case "DEU":
+			successMessage = fmt.Sprintf("Ihre Bestellzeit wurde gespeichert: %02d.%02d um 09:00!", nextDay.Day(), nextDay.Month())
+		case "EN":
+			successMessage = fmt.Sprintf("Your order time has been saved: %02d.%02d at 09:00!", nextDay.Day(), nextDay.Month())
+		case "UK":
+			successMessage = fmt.Sprintf("Ваш час замовлення збережено: %02d.%02d о 09:00!", nextDay.Day(), nextDay.Month())
+		case "RU":
+			successMessage = fmt.Sprintf("Ваше время заказа сохранено: %02d.%02d в 09:00!", nextDay.Day(), nextDay.Month())
+		}
+		msg := tgbotapi.NewMessage(chatID, successMessage)
+		msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+		bot.Send(msg)
+
+		// Отправляем благодарность за заказ
+		sendAdminNotification(bot, chatID, lang)
+		return
+
 	}
+
+	// Обработка ввода времени вручную (новый формат "дд.мм.гггг чч:мм")
+	parsedTime, err := time.ParseInLocation("02.01.2006 15:04", input, loc)
+	if err != nil || parsedTime.Before(currentTime) {
+		sendInvalidTimeMessage(bot, chatID, lang)
+		return
+	}
+
+	// Проверка рабочего времени
+	if !isWithinWorkingHours(parsedTime) {
+		sendStoreClosedOptions(bot, chatID, lang, parsedTime)
+		return
+	}
+
+	// Если время корректное, сохраняем его и отправляем благодарность
+	// Сохраняем время в формате "дд.мм.гггг чч:мм"
+	userInfo.OrderTime = parsedTime.Format("02.01.2006 15:04")
+	sendUpdatedInfoToAdmin(bot, chatID, *userInfo)
+
+	// Сообщение пользователю о сохранении времени
+	var successMessage string
+	switch lang {
+	case "DEU":
+		successMessage = "Ihre Bestellzeit wurde gespeichert!"
+	case "EN":
+		successMessage = "Your order time has been saved!"
+	case "UK":
+		successMessage = "Ваш час замовлення збережено!"
+	case "RU":
+		successMessage = "Ваше время заказа сохранено!"
+	}
+	msg := tgbotapi.NewMessage(chatID, successMessage)
+	msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+	bot.Send(msg)
+
+	// Отправляем благодарность за заказ
+	sendAdminNotification(bot, chatID, lang)
+}
+func sendAdminNotification(bot *tgbotapi.BotAPI, chatID int64, lang string) {
+	var message string
+	switch lang {
+	case "DEU":
+		message = "Vielen Dank für Ihre Bestellung und die Wahl von Florgalerie😄! Der Administrator hat Ihre Bestellung erhalten und <b><i>teilt Ihnen den Preis</i></b> für den von Ihnen gewählten Strauß mit. Wir prüfen die Verfügbarkeit der ausgewählten Blumen und stellen Ihren Strauß zusammen. Um einen neuen Auftrag zu erstellen, schreiben Sie '/start'."
+	case "EN":
+		message = "Thank you for ordering and choosing Florgalerie😄! The administrator has received your order and <b><i>tell you the price</i></b> of the bouquet you've chosen. We are checking the availability of selected flowers and pick a bouquet. To create a new order, write '/start'."
+	case "UK":
+		message = "Дякую Вам за зроблене замовлення і вибір Florgalerie😄! Адміністратор отримав Ваше замовлення і <b><i>підкаже вам ціну</i></b> обраного Вами букета. Перевіряємо наявність обраних квітів і збираємо букет. Для створення нового замовлення напишіть '/start'."
+	case "RU":
+		message = "Благодарю Вас за сделанный заказ и выбор Florgalerie😄! Администратор получил Ваш заказ и <b><i>подскажет вам цену</i></b> выбраного Вами букета. Проверяем наличие выбранных цветов и собираем букет. Для создания нового заказа напишите '/start'."
+
+	}
+	msg := tgbotapi.NewMessage(chatID, message)
+	msg.ParseMode = "HTML"
+	bot.Send(msg)
+
 }
 
 func main() {
@@ -501,151 +426,110 @@ func main() {
 
 	updates := bot.GetUpdatesChan(u)
 
-	userLanguage := make(map[int64]string)
-	userState := make(map[int64]string)
-	userData := make(map[int64]map[string]string)
+	userData := make(map[int64]*UserInfo)
 
 	for update := range updates {
-		if update.Message != nil {
-			chatID := update.Message.Chat.ID
+		if update.Message == nil {
+			continue
+		}
 
-			// Инициализация вложенной карты для userData
-			if userData[chatID] == nil {
-				userData[chatID] = make(map[string]string)
-			}
+		chatID := update.Message.Chat.ID
+		text := update.Message.Text
 
-			switch update.Message.Text {
-			case "/start":
-				buttons := tgbotapi.NewReplyKeyboard(
-					tgbotapi.NewKeyboardButtonRow(
-						tgbotapi.NewKeyboardButton("DEU"),
-						tgbotapi.NewKeyboardButton("EN"),
-					),
-					tgbotapi.NewKeyboardButtonRow(
-						tgbotapi.NewKeyboardButton("UK"),
-						tgbotapi.NewKeyboardButton("RU"),
-					),
-				)
-				msg := tgbotapi.NewMessage(chatID, "Select a language:")
-				msg.ReplyMarkup = buttons
-				bot.Send(msg)
-			case "DEU", "EN", "UK", "RU":
-				userLanguage[chatID] = update.Message.Text
-				sendGreeting(bot, chatID, update.Message.Text)
-			case "Next!", "Weiter!", "Далі!", "Далее!":
-				if userState[chatID] == "confirming_order" {
-					userState[chatID] = "choosing_payment"
-					sendPaymentMethodQuestion(bot, chatID, userLanguage[chatID])
-				} else {
-					sendQuestion(bot, chatID, userLanguage[chatID])
-				}
-			case "Choose!", "Auswählen!", "Вибрати!", "Выбрать!":
-				userState[chatID] = "choosing_bouquet"
-				sendBouquetChoiceMessage(bot, chatID, userLanguage[chatID])
+		// Обработка сообщений от администратора
+		if chatID == AdminID {
+			handleAdminMessage(bot, update, userData)
+			continue
+		}
 
-				removeKeyboard := tgbotapi.NewRemoveKeyboard(true)
-				msg := tgbotapi.NewMessage(chatID, "")
-				msg.ReplyMarkup = removeKeyboard
-				bot.Send(msg)
-			case "Create my own!", "Mein eigener Strauß!", "Створити свій!", "Создать свой!":
-				userState[chatID] = "creating_bouquet"
-				sendCustomBouquetMessage(bot, chatID, userLanguage[chatID])
+		if userData[chatID] == nil {
+			userData[chatID] = &UserInfo{}
+		}
 
-				// Удаляем кнопки после выбора
-				removeKeyboard := tgbotapi.NewRemoveKeyboard(true)
-				msg := tgbotapi.NewMessage(chatID, " ") // Здесь текст не важен, можно оставить пустую строку или пробел
-				msg.ReplyMarkup = removeKeyboard
-				bot.Send(msg)
+		userInfo := userData[chatID]
+		//отправка фоток от пользователя
+		if update.Message.Photo != nil {
+			photo := update.Message.Photo[len(update.Message.Photo)-1] // Берём самое большое фото
+			adminMessage := fmt.Sprintf("📸 Новое фото от пользователя (ID: %d):", chatID)
 
-			case "Just one", "Nur einen", "Тільки один", "Только один":
-				userState[chatID] = "choosing_packaging"
-				userData[chatID]["quantity"] = "1"
-				msg := tgbotapi.NewMessage(chatID, " ")
+			// Отправляем текстовое сообщение админу
+			bot.Send(tgbotapi.NewMessage(AdminID, adminMessage))
+
+			// Пересылаем фото администратору
+			photoMsg := tgbotapi.NewPhoto(AdminID, tgbotapi.FileID(photo.FileID))
+			bot.Send(photoMsg)
+			continue
+		}
+
+		switch {
+		case text == "/start":
+			msg := tgbotapi.NewMessage(chatID, "Please select your language:")
+			msg.ReplyMarkup = tgbotapi.NewReplyKeyboard(
+				tgbotapi.NewKeyboardButtonRow(
+					tgbotapi.NewKeyboardButton("DEU"),
+					tgbotapi.NewKeyboardButton("EN"),
+					tgbotapi.NewKeyboardButton("UK"),
+					tgbotapi.NewKeyboardButton("RU"),
+				),
+			)
+			bot.Send(msg)
+
+		case text == "DEU" || text == "EN" || text == "UK" || text == "RU":
+			userInfo.Language = text
+			sendGreeting(bot, chatID, text)
+			askUserName(bot, chatID, text) // Задаём вопрос про имя
+
+		case userInfo.UserName == "":
+			// Пользователь вводит имя или выбирает "Остаться анонимным"
+			if strings.Contains(text, "Остаться анонимным") || strings.Contains(text, "Stay anonymous") ||
+				strings.Contains(text, "Залишитися анонімним") || strings.Contains(text, "Anonym bleiben") {
+				userInfo.UserName = "Анонимный пользователь" // Сохраняем как анонимный
+
+				// Удаляем кнопку "Остаться анонимным"
+				msg := tgbotapi.NewMessage(chatID, "Вы решили остаться анонимным.")
 				msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 				bot.Send(msg)
-				sendPackagingQuestion(bot, chatID, userLanguage[chatID])
-			case "Multiple bouquets", "Mehrere Sträuße", "Кілька букетів", "Несколько букетов":
-				userState[chatID] = "choosing_packaging"
-				userData[chatID]["quantity"] = "multiple"
-				msg := tgbotapi.NewMessage(chatID, "Допилить случай для выбора нескольких.")
-				bot.Send(msg)
-				sendPackagingQuestion(bot, chatID, userLanguage[chatID])
-			case "Kraftpapier", "Bunte Verpackung", "Ohne Verpackung", "Craft paper", "Colored wrap", "No packaging",
-				"Крафтовий папір", "Кольорова упаковка", "Упаковка не потрiбна", "Крафтовая бумага", "Цветная упаковка", "Без упаковки":
-				userState[chatID] = "waiting_for_time"
-				userData[chatID]["packaging"] = update.Message.Text
 
-				removeKeyboard := tgbotapi.NewRemoveKeyboard(true)
-				msg := tgbotapi.NewMessage(chatID, " "+update.Message.Text)
-				msg.ReplyMarkup = removeKeyboard
-				bot.Send(msg)
+				sendBouquetRequest(bot, chatID, userInfo.Language)
+			} else {
+				// Сохраняем введённое имя
+				userInfo.UserName = text
 
-				sendOrderTimeRequest(bot, chatID, userLanguage[chatID])
-			default:
-				switch userState[chatID] {
-				case "choosing_bouquet":
-					matched, _ := regexp.MatchString(`^#\d+$`, update.Message.Text)
-					if matched {
-						userData[chatID]["bouquet"] = update.Message.Text
-						sendBouquetSavedMessage(bot, chatID, userLanguage[chatID], update.Message.Text)
-						sendSingleOrMultipleQuestion(bot, chatID, userLanguage[chatID])
-						userState[chatID] = "choosing_single_or_multiple"
-					} else {
-						bot.Send(tgbotapi.NewMessage(chatID, "Please enter a valid bouquet number (e.g., #123)."))
-					}
-				case "creating_bouquet":
-					userData[chatID]["bouquet"] = update.Message.Text
-					sendBouquetSavedMessage(bot, chatID, userLanguage[chatID], update.Message.Text)
-					sendSingleOrMultipleQuestion(bot, chatID, userLanguage[chatID])
-					userState[chatID] = "choosing_single_or_multiple"
-				case "waiting_for_time":
-					handleOrderTime(bot, chatID, update.Message.Text, userLanguage[chatID], userData)
-					userData[chatID]["time"] = update.Message.Text
-					sendOrderConfirmation(bot, chatID, userLanguage[chatID], userData)
-					userState[chatID] = "confirming_order"
-				case "Return to time selection", "Zurück zur Zeitauswahl", "Повернутися до вибору часу", "Вернуться к выбору времени":
-					userState[chatID] = "waiting_for_time"
-					sendOrderTimeRequest(bot, chatID, userLanguage[chatID])
-				case "Get as soon as possible tomorrow", "Möglichst früh morgen abholen", "Забрати якнайшвидше завтра", "Получить как можно скорее завтра":
-					nextDay := time.Now().Add(24 * time.Hour).Format("2006-01-02 08:00")
-					userData[chatID]["time"] = nextDay
-					sendOrderTimeSavedMessage(bot, chatID, userLanguage[chatID])
-
-				case "choosing_payment":
-					switch update.Message.Text {
-					case "С предоплатой", "Mit Vorauszahlung", "З передоплатою", "With prepayment":
-						sendPrepaymentDetails(bot, chatID, userLanguage[chatID])
-						sendThankYouMessage(bot, chatID, userLanguage[chatID])
-						adminChatID := int64(4367763577084) // Chat ID администратора
-						sendOrderDetailsToAdmin(bot, adminChatID, chatID, userData)
-						// Возвращаем пользователя к началу с кнопкой /start
-						startButton := tgbotapi.NewReplyKeyboard(
-							tgbotapi.NewKeyboardButtonRow(
-								tgbotapi.NewKeyboardButton("/start"),
-							),
-						)
-						msg := tgbotapi.NewMessage(chatID, " ")
-						msg.ReplyMarkup = startButton
-						bot.Send(msg)
-					case "Без предоплаты", "Ohne Vorauszahlung", "Без передоплати", "Without prepayment":
-						sendNoPrepaymentDetails(bot, chatID, userLanguage[chatID], userData)
-						sendThankYouMessage(bot, chatID, userLanguage[chatID])
-						adminChatID := int64(999999999) // Chat ID администратора
-						sendOrderDetailsToAdmin(bot, adminChatID, chatID, userData)
-						// Возвращаем пользователя к началу с кнопкой /start
-						startButton := tgbotapi.NewReplyKeyboard(
-							tgbotapi.NewKeyboardButtonRow(
-								tgbotapi.NewKeyboardButton("/start"),
-							),
-						)
-						msg := tgbotapi.NewMessage(chatID, " ")
-						msg.ReplyMarkup = startButton
-						bot.Send(msg)
-					}
-				default:
-					bot.Send(tgbotapi.NewMessage(chatID, "Please select a valid option."))
+				// Формируем сообщение на выбранном языке
+				var greeting string
+				switch userInfo.Language {
+				case "DEU":
+					greeting = fmt.Sprintf("Freut mich, Sie kennenzulernen, %s!", userInfo.UserName)
+				case "EN":
+					greeting = fmt.Sprintf("Nice to meet you, %s!", userInfo.UserName)
+				case "UK":
+					greeting = fmt.Sprintf("Приємно познайомитися, %s!", userInfo.UserName)
+				case "RU":
+					greeting = fmt.Sprintf("Приятно познакомиться, %s!", userInfo.UserName)
 				}
+
+				// Удаляем кнопку "Остаться анонимным"
+				msg := tgbotapi.NewMessage(chatID, greeting)
+				msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+				bot.Send(msg)
+
+				sendBouquetRequest(bot, chatID, userInfo.Language)
 			}
+
+		case userInfo.Bouquet == "":
+			userInfo.Bouquet = text
+			sendOrderTimeRequest(bot, chatID, userInfo.Language)
+
+		case userInfo.OrderTime == "":
+			handleOrderTime(bot, chatID, text, userInfo.Language, userInfo)
+
+		case userInfo.OrderTime != "":
+			// Новое сообщение от пользователя
+			adminMessage := fmt.Sprintf(
+				" Новое сообщение от пользователя %d:\n\n📝 Имя: %s\n\n🗨️ Ваш предыдущий ответ:\n%s\n\n📝 Ответ пользователя (ID: %d):\n%s",
+				chatID, userInfo.UserName, userInfo.LastAdminMessage, chatID, text,
+			)
+			bot.Send(tgbotapi.NewMessage(AdminID, adminMessage))
 		}
 	}
 }
