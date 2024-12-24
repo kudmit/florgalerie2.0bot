@@ -420,6 +420,13 @@ func main() {
 
 	bot.Debug = true
 	log.Printf("Authorized on account %s", bot.Self.UserName)
+	port := os.Getenv("PORT")
+if port == "" {
+	port = "8080" // Значение по умолчанию
+}
+log.Printf("Starting server on port %s...", port)
+http.ListenAndServe(":"+port, nil)
+
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
