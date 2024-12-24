@@ -530,6 +530,10 @@ func main() {
 				chatID, userInfo.UserName, userInfo.LastAdminMessage, chatID, text,
 			)
 			bot.Send(tgbotapi.NewMessage(AdminID, adminMessage))
-		}
+			}
 	}
+	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	})
 }
