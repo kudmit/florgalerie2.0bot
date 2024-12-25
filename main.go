@@ -416,133 +416,135 @@ func sendAdminNotification(bot *tgbotapi.BotAPI, chatID int64, lang string) {
 }
 
 func main() {
-    bot, err := tgbotapi.NewBotAPI("7605031210:AAGTiIboCT3mxxLO6egJ3Zhkr8LAVcdu6yo")
-    if err != nil {
-        log.Panic(err)
-    }
+	bot, err := tgbotapi.NewBotAPI("7605031210:AAGTiIboCT3mxxLO6egJ3Zhkr8LAVcdu6yo")
+	if err != nil {
+		log.Panic(err)
+	}
 
-    bot.Debug = true
-    log.Printf("Authorized on account %s", bot.Self.UserName)
+	bot.Debug = true
+	log.Printf("Authorized on account %s", bot.Self.UserName)
 
-    // Устанавливаем Webhook
-    domain := "https://florgalerie2bot.onrender.com" // Укажите ваш HTTPS-домен
-    webhookURL := domain + "/" + bot.Token
+	// Устанавливаем Webhook
+	domain := "https://florgalerie2bot.onrender.com" // Укажите ваш HTTPS-домен
+	webhookURL := domain + "/" + bot.Token
 
-    webhookConfig, err := tgbotapi.NewWebhook(webhookURL)
-    if err != nil {
-        log.Fatalf("Error creating webhook: %v", err)
-    }
+	webhookConfig, err := tgbotapi.NewWebhook(webhookURL)
+	if err != nil {
+		log.Fatalf("Error creating webhook: %v", err)
+	}
 
-    if _, err := bot.Request(webhookConfig); err != nil {
-        log.Fatalf("Failed to set webhook: %v", err)
-    }
+	if _, err := bot.Request(webhookConfig); err != nil {
+		log.Fatalf("Failed to set webhook: %v", err)
+	}
 
-    // Обработка маршрута для Webhook
-    http.HandleFunc("/"+bot.Token, func(w http.ResponseWriter, r *http.Request) {
-        var update tgbotapi.Update
-        if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
-            log.Printf("Error decoding update: %v", err)
-            return
-        }
-        processUpdate(bot, update) // Вызов функции обработки
-    })
+	// Обработка маршрута для Webhook
+	http.HandleFunc("/"+bot.Token, func(w http.ResponseWriter, r *http.Request) {
+		var update tgbotapi.Update
+		if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
+			log.Printf("Error decoding update: %v", err)
+			http.Error(w, "Bad request", http.StatusBadRequest)
+			return
+		}
+		processUpdate(bot, update) // Вызов функции обработки
+		w.WriteHeader(http.StatusOK)
+	})
 
-    // Обработка healthcheck
-    http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-        w.WriteHeader(http.StatusOK)
-        w.Write([]byte("OK"))
-    })
+	// Обработка healthcheck
+	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	})
 
-    // Старт HTTP-сервера
-    port := os.Getenv("PORT")
-    if port == "" {
-        port = "8080" // Значение по умолчанию
-    }
-    log.Printf("Starting server on port %s...", port)
-    log.Fatal(http.ListenAndServe(":"+port, nil))
+	// Старт HTTP-сервера
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080" // Значение по умолчанию
+	}
+	log.Printf("Starting server on port %s...", port)
+	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 
 // Определение функции processUpdate
 func processUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
-    userData := make(map[int64]*UserInfo)
+	userData := make(map[int64]*UserInfo)
 
-    if update.Message == nil {
-        return
-    }
+	if update.Message == nil {
+		return
+	}
 
-    chatID := update.Message.Chat.ID
-    text := update.Message.Text
+	chatID := update.Message.Chat.ID
+	text := update.Message.Text
 
-    // Обработка сообщений от администратора
-    if chatID == AdminID {
-        handleAdminMessage(bot, update, userData)
-        return
-    }
+	// Обработка сообщений от администратора
+	if chatID == AdminID {
+		handleAdminMessage(bot, update, userData)
+		return
+	}
 
-    if userData[chatID] == nil {
-        userData[chatID] = &UserInfo{}
-    }
+	if userData[chatID] == nil {
+		userData[chatID] = &UserInfo{}
+	}
 
-    userInfo := userData[chatID]
+	userInfo := userData[chatID]
 
-    // Обработка фотографий
-    if update.Message.Photo != nil {
-        photo := update.Message.Photo[len(update.Message.Photo)-1]
-        adminMessage := fmt.Sprintf("📸 Новое фото от пользователя (ID: %d):", chatID)
-        bot.Send(tgbotapi.NewMessage(AdminID, adminMessage))
-        photoMsg := tgbotapi.NewPhoto(AdminID, tgbotapi.FileID(photo.FileID))
-        bot.Send(photoMsg)
-        return
-    }
+	// Обработка фотографий
+	if update.Message.Photo != nil {
+		photo := update.Message.Photo[len(update.Message.Photo)-1]
+		adminMessage := fmt.Sprintf("📸 Новое фото от пользователя (ID: %d):", chatID)
+		bot.Send(tgbotapi.NewMessage(AdminID, adminMessage))
+		photoMsg := tgbotapi.NewPhoto(AdminID, tgbotapi.FileID(photo.FileID))
+		bot.Send(photoMsg)
+		return
+	}
 
-    // Основная логика обработки сообщений
-    switch {
-    case text == "/start":
-        msg := tgbotapi.NewMessage(chatID, "Please select your language:")
-        msg.ReplyMarkup = tgbotapi.NewReplyKeyboard(
-            tgbotapi.NewKeyboardButtonRow(
-                tgbotapi.NewKeyboardButton("DEU"),
-                tgbotapi.NewKeyboardButton("EN"),
-                tgbotapi.NewKeyboardButton("UK"),
-                tgbotapi.NewKeyboardButton("RU"),
-            ),
-        )
-        bot.Send(msg)
+	// Основная логика обработки сообщений
+	switch {
+	case text == "/start":
+		msg := tgbotapi.NewMessage(chatID, "Please select your language:")
+		msg.ReplyMarkup = tgbotapi.NewReplyKeyboard(
+			tgbotapi.NewKeyboardButtonRow(
+				tgbotapi.NewKeyboardButton("DEU"),
+				tgbotapi.NewKeyboardButton("EN"),
+				tgbotapi.NewKeyboardButton("UK"),
+				tgbotapi.NewKeyboardButton("RU"),
+			),
+		)
+		bot.Send(msg)
 
-    case text == "DEU" || text == "EN" || text == "UK" || text == "RU":
-        userInfo.Language = text
-        sendGreeting(bot, chatID, text)
-        askUserName(bot, chatID, text)
+	case text == "DEU" || text == "EN" || text == "UK" || text == "RU":
+		userInfo.Language = text
+		sendGreeting(bot, chatID, text)
+		askUserName(bot, chatID, text)
 
-    case userInfo.UserName == "":
-        if strings.Contains(text, "Остаться анонимным") || strings.Contains(text, "Stay anonymous") ||
-            strings.Contains(text, "Залишитися анонімним") || strings.Contains(text, "Anonym bleiben") {
-            userInfo.UserName = "Анонимный пользователь"
-            msg := tgbotapi.NewMessage(chatID, "Вы решили остаться анонимным.")
-            msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
-            bot.Send(msg)
-            sendBouquetRequest(bot, chatID, userInfo.Language)
-        } else {
-            userInfo.UserName = text
-            greeting := fmt.Sprintf("Приятно познакомиться, %s!", userInfo.UserName)
-            msg := tgbotapi.NewMessage(chatID, greeting)
-            msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
-            bot.Send(msg)
-            sendBouquetRequest(bot, chatID, userInfo.Language)
-        }
+	case userInfo.UserName == "":
+		if strings.Contains(text, "Остаться анонимным") || strings.Contains(text, "Stay anonymous") ||
+			strings.Contains(text, "Залишитися анонімним") || strings.Contains(text, "Anonym bleiben") {
+			userInfo.UserName = "Анонимный пользователь"
+			msg := tgbotapi.NewMessage(chatID, "Вы решили остаться анонимным.")
+			msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+			bot.Send(msg)
+			sendBouquetRequest(bot, chatID, userInfo.Language)
+		} else {
+			userInfo.UserName = text
+			greeting := fmt.Sprintf("Приятно познакомиться, %s!", userInfo.UserName)
+			msg := tgbotapi.NewMessage(chatID, greeting)
+			msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+			bot.Send(msg)
+			sendBouquetRequest(bot, chatID, userInfo.Language)
+		}
 
-    case userInfo.Bouquet == "":
-        userInfo.Bouquet = text
-        sendOrderTimeRequest(bot, chatID, userInfo.Language)
+	case userInfo.Bouquet == "":
+		userInfo.Bouquet = text
+		sendOrderTimeRequest(bot, chatID, userInfo.Language)
 
-    case userInfo.OrderTime == "":
-        handleOrderTime(bot, chatID, text, userInfo.Language, userInfo)
+	case userInfo.OrderTime == "":
+		handleOrderTime(bot, chatID, text, userInfo.Language, userInfo)
 
-    case userInfo.OrderTime != "":
-        adminMessage := fmt.Sprintf(
-            "Новое сообщение от пользователя %d:\n\n📝 Имя: %s\n\n🗨️ Ваш предыдущий ответ:\n%s\n\n📝 Ответ пользователя (ID: %d):\n%s",
-            chatID, userInfo.UserName, userInfo.LastAdminMessage, chatID, text,
-        )
-        bot.Send(tgbotapi.NewMessage(AdminID, adminMessage))
-    }
+	case userInfo.OrderTime != "":
+		adminMessage := fmt.Sprintf(
+			"Новое сообщение от пользователя %d:\n\n📝 Имя: %s\n\n🗨️ Ваш предыдущий ответ:\n%s\n\n📝 Ответ пользователя (ID: %d):\n%s",
+			chatID, userInfo.UserName, userInfo.LastAdminMessage, chatID, text,
+		)
+		bot.Send(tgbotapi.NewMessage(AdminID, adminMessage))
+	}
 }
