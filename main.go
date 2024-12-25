@@ -425,7 +425,7 @@ func main() {
     log.Printf("Authorized on account %s", bot.Self.UserName)
 
     // Устанавливаем Webhook
-    domain := "https://<https://dashboard.render.com/web/srv-cti493rtq21c73a0gmvg>" // Укажите ваш HTTPS-домен
+    domain := "https://api.render.com/deploy/srv-cti493rtq21c73a0gmvg?key=AMcTr272i_g" // Укажите ваш HTTPS-домен
     webhookURL := domain + "/" + bot.Token
 
     webhookConfig, err := tgbotapi.NewWebhook(webhookURL)
