@@ -176,6 +176,12 @@ func sendBouquetRequest(bot *tgbotapi.BotAPI, chatID int64, lang string) {
 	case "RU":
 		message = "Опишите, пожалуйста, букет, который вы хотели бы:"
 	}
+
+	if message == "" {
+		log.Printf("Error: Bouquet request message is empty for language: %s", lang)
+		return
+	}
+
 	msg := tgbotapi.NewMessage(chatID, message)
 	bot.Send(msg)
 }
@@ -293,7 +299,6 @@ func handleNextDaySelection(bot *tgbotapi.BotAPI, chatID int64, lang string, use
 	nextDay := time.Now().In(loc).Add(24 * time.Hour)
 	nextDayMorning := time.Date(nextDay.Year(), nextDay.Month(), nextDay.Day(), 9, 0, 0, 0, loc)
 
-	// Сохраняем время в формате "дд.мм.гггг чч:мм"
 	userInfo.OrderTime = nextDayMorning.Format("02.01.2006 15:04")
 	sendUpdatedInfoToAdmin(bot, chatID, *userInfo)
 
@@ -327,13 +332,12 @@ func handleOrderTime(bot *tgbotapi.BotAPI, chatID int64, input string, lang stri
 	}
 
 	// Проверяем, нажата ли кнопка "Получить на следующий день"
-	// Проверяем, нажата ли кнопка "Получить на следующий день"
 	if strings.Contains(input, "Получить") || strings.Contains(input, "Receive") ||
 		strings.Contains(input, "Отримати") || strings.Contains(input, "Erhalten") {
 		nextDay := currentTime.AddDate(0, 0, 1)
 		nextDayMorning := time.Date(nextDay.Year(), nextDay.Month(), nextDay.Day(), 9, 0, 0, 0, loc)
 
-		// Сохраняем корректное время в формате "дд.мм.гггг чч:мм"
+		// Сохраняем корректное время 
 		userInfo.OrderTime = nextDayMorning.Format("02.01.2006 15:04")
 		sendUpdatedInfoToAdmin(bot, chatID, *userInfo)
 
@@ -353,13 +357,11 @@ func handleOrderTime(bot *tgbotapi.BotAPI, chatID int64, input string, lang stri
 		msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 		bot.Send(msg)
 
-		// Отправляем благодарность за заказ
+		//благодарность за заказ
 		sendAdminNotification(bot, chatID, lang)
 		return
 
 	}
-
-	// Обработка ввода времени вручную (новый формат "дд.мм.гггг чч:мм")
 	parsedTime, err := time.ParseInLocation("02.01.2006 15:04", input, loc)
 	if err != nil || parsedTime.Before(currentTime) {
 		sendInvalidTimeMessage(bot, chatID, lang)
@@ -372,8 +374,7 @@ func handleOrderTime(bot *tgbotapi.BotAPI, chatID int64, input string, lang stri
 		return
 	}
 
-	// Если время корректное, сохраняем его и отправляем благодарность
-	// Сохраняем время в формате "дд.мм.гггг чч:мм"
+	// Если время корректное сохраняем его и отправляем благодарность
 	userInfo.OrderTime = parsedTime.Format("02.01.2006 15:04")
 	sendUpdatedInfoToAdmin(bot, chatID, *userInfo)
 
@@ -393,7 +394,7 @@ func handleOrderTime(bot *tgbotapi.BotAPI, chatID int64, input string, lang stri
 	msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 	bot.Send(msg)
 
-	// Отправляем благодарность за заказ
+	//благодарность за заказ
 	sendAdminNotification(bot, chatID, lang)
 }
 func sendAdminNotification(bot *tgbotapi.BotAPI, chatID int64, lang string) {
@@ -425,7 +426,7 @@ func main() {
 	log.Printf("Authorized on account %s", bot.Self.UserName)
 
 	// Устанавливаем Webhook
-	domain := "https://florgalerie2bot.onrender.com" // Укажите ваш HTTPS-домен
+	domain := "https://florgalerie2bot.onrender.com" 
 	webhookURL := domain + "/" + bot.Token
 
 	webhookConfig, err := tgbotapi.NewWebhook(webhookURL)
@@ -445,7 +446,7 @@ func main() {
 			http.Error(w, "Bad request", http.StatusBadRequest)
 			return
 		}
-		processUpdate(bot, update) // Вызов функции обработки
+		processUpdate(bot, update) 
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -458,13 +459,12 @@ func main() {
 	// Старт HTTP-сервера
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080" // Значение по умолчанию
+		port = "8080" 
 	}
 	log.Printf("Starting server on port %s...", port)
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 
-// Определение функции processUpdate
 func processUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	userData := make(map[int64]*UserInfo)
 
@@ -475,7 +475,6 @@ func processUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	chatID := update.Message.Chat.ID
 	text := update.Message.Text
 
-	// Обработка сообщений от администратора
 	if chatID == AdminID {
 		handleAdminMessage(bot, update, userData)
 		return
@@ -487,7 +486,7 @@ func processUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 
 	userInfo := userData[chatID]
 
-	// Обработка фотографий
+	
 	if update.Message.Photo != nil {
 		photo := update.Message.Photo[len(update.Message.Photo)-1]
 		adminMessage := fmt.Sprintf("📸 Новое фото от пользователя (ID: %d):", chatID)
@@ -497,7 +496,6 @@ func processUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 		return
 	}
 
-	// Основная логика обработки сообщений
 	switch {
 	case text == "/start":
 		msg := tgbotapi.NewMessage(chatID, "Please select your language:")
@@ -519,20 +517,53 @@ func processUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	case userInfo.UserName == "":
 		if strings.Contains(text, "Остаться анонимным") || strings.Contains(text, "Stay anonymous") ||
 			strings.Contains(text, "Залишитися анонімним") || strings.Contains(text, "Anonym bleiben") {
+
 			userInfo.UserName = "Анонимный пользователь"
-			msg := tgbotapi.NewMessage(chatID, "Вы решили остаться анонимным.")
+
+			var anonymousMessage string
+			switch userInfo.Language {
+			case "DEU":
+				anonymousMessage = "Sie haben entschieden, anonym zu bleiben."
+			case "EN":
+				anonymousMessage = "You decided to stay anonymous."
+			case "UK":
+				anonymousMessage = "Ви вирішили залишитися анонімним."
+			case "RU":
+				anonymousMessage = "Вы решили остаться анонимным."
+			default:
+				anonymousMessage = "You decided to stay anonymous." 
+			}
+
+			msg := tgbotapi.NewMessage(chatID, anonymousMessage)
 			msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 			bot.Send(msg)
-			sendBouquetRequest(bot, chatID, userInfo.Language)
+
+			log.Printf("User chose to stay anonymous. Sending bouquet request...")
+			sendBouquetRequest(bot, chatID, userInfo.Language) 
 		} else {
 			userInfo.UserName = text
-			greeting := fmt.Sprintf("Приятно познакомиться, %s!", userInfo.UserName)
+
+			var greeting string
+			switch userInfo.Language {
+			case "DEU":
+				greeting = fmt.Sprintf("Freut mich, Sie kennenzulernen, %s!", userInfo.UserName)
+			case "EN":
+				greeting = fmt.Sprintf("Nice to meet you, %s!", userInfo.UserName)
+			case "UK":
+				greeting = fmt.Sprintf("Приємно познайомитися, %s!", userInfo.UserName)
+			case "RU":
+				greeting = fmt.Sprintf("Приятно познакомиться, %s!", userInfo.UserName)
+			default:
+				greeting = fmt.Sprintf("Nice to meet you, %s!", userInfo.UserName)
+			}
+
 			msg := tgbotapi.NewMessage(chatID, greeting)
 			msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 			bot.Send(msg)
-			sendBouquetRequest(bot, chatID, userInfo.Language)
-		}
 
+			log.Printf("User provided name: %s. Sending bouquet request...", userInfo.UserName)
+			sendBouquetRequest(bot, chatID, userInfo.Language) 
+		}
 	case userInfo.Bouquet == "":
 		userInfo.Bouquet = text
 		sendOrderTimeRequest(bot, chatID, userInfo.Language)
