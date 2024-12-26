@@ -417,7 +417,7 @@ func sendAdminNotification(bot *tgbotapi.BotAPI, chatID int64, lang string) {
 }
 
 func main() {
-	bot, err := tgbotapi.NewBotAPI("7605031210:AAGTiIboCT3mxxLO6egJ3Zhkr8LAVcdu6yo")
+	bot, err := tgbotapi.NewBotAPI("BOT_TOKEN")
 	if err != nil {
 		log.Panic(err)
 	}
