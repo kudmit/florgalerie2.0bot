@@ -123,13 +123,13 @@ func sendGreeting(bot *tgbotapi.BotAPI, chatID int64, lang string) {
 	var greeting string
 	switch lang {
 	case "DEU":
-		greeting = "Willkommen in unserer Blumenboutique Florgalerie💐! Ich bin Max, ein Bot🤖, der Ihnen bei der Bestellung eines Blumenstraußes hilft, und unsere aufmerksamen Administratoren unterstützen Sie bei speziellen Anliegen! Wir verfolgen einen ausschließlich individuellen Ansatz für unsere Kunden, daher gibt es bei uns keine standardisierten oder vorgefertigten Sträuße."
+		greeting = "Willkommen in unserem Blumengeschäft Florgalerie💐! Ich bin ein Bot🤖, der Ihnen bei der Bestellung von Blumensträußen hilft, und unsere hilfsbereiten Mitarbeiter an der Rezeption unterstützen Sie bei untypischen Fragen! Wir gehen sehr persönlich auf unsere Kunden ein und freuen uns darauf, Ihnen zu helfen, etwas Besonderes zu verfassen!"
 	case "EN":
-		greeting = "Welcome to our flower boutique Florgalerie💐! My name is Max, a bot🤖 designed to assist you with ordering a bouquet, and our attentive administrators will help you with any unique requests! We take an exclusively individual approach to our clients, which is why we don't offer standardized or pre-made bouquets."
+		greeting = "Welcome to our Florgalerie💐 florist shop! I'm a bot🤖 created to help you with the bouquet ordering process, and our helpful receptionists will assist you with atypical questions! We take an extremely personalised approach to our customers and look forward to helping you create something special!"
 	case "UK":
-		greeting = "Вітаємо Вас у нашому квітковому бутіку Florgalerie💐! Мене звати Макс, я бот🤖, створений для допомоги Вам із замовленням букета, а наші чуйні адміністратори допоможуть Вам із нетиповими запитаннями! Ми дотримуємося виключно індивідуального підходу до клієнтів, тому у нас відсутні типові або вже готові букети."
+		greeting = "Вітаємо Вас у нашому флористичному магазині Florgalerie💐! Я бот🤖, створений для допомоги Вам з процесом замовлення букета, а наші чуйні адміністратори допоможуть Вам з нетиповими питаннями! Ми дотримуємося виключно індивідуального підходу до клієнтів і будемо раді допомогти Вам створити щось особливе!"
 	case "RU":
-		greeting = "Приветствуем Вас в нашем цветочном бутике Florgalerie💐! Меня зовут Макс, я бот🤖, созданный для помощи Вам с заказом букета, а наши чуткие администраторы помогут Вам с нетиповыми вопросами! У нас исключительно индивидуальный подход к клиентам, поэтому отсутствуют типовые-уже скомпонованные букеты."
+		greeting = "«Приветствуем Вас в нашем флористическом магазине Florgalerie💐! Я бот🤖, созданный для помощи Вам с процессом заказа букета, а наши отзывчивые администраторы помогут Вам с нетипичными вопросами! Мы придерживаемся исключительно индивидуального подхода к клиентам и будем рады помочь Вам создать нечто особенное!"
 	}
 
 	msg := tgbotapi.NewMessage(chatID, greeting)
@@ -168,13 +168,13 @@ func sendBouquetRequest(bot *tgbotapi.BotAPI, chatID int64, lang string) {
 	var message string
 	switch lang {
 	case "DEU":
-		message = "Beschreiben Sie bitte den gewünschten Blumenstrauß:"
+		message = "Bitte beschreiben Sie den Strauß, den Sie kreieren möchten. Anzahl der Blumen, Farbschema des Straußes, ungefähres verfügbares Budget. 😊 (Bitte senden Sie alle oben genannten Informationen in einer Nachricht)"
 	case "EN":
-		message = "Please describe the bouquet you would like:"
+		message = "‘Please describe the bouquet you would like to create. Number of flowers, colour scheme of the bouquet, approximate available budget. 😊 (Please send all of the above information in one message)"
 	case "UK":
-		message = "Опишіть, будь ласка, букет, який ви хотіли б:"
+		message = "Опишіть, будь ласка, букет, який ви хотіли б створити. Кількість квітів, кольорова гама букета, приблизний наявний бюджет. 😊 (Всю зазначену інформацію будь ласка надішліть одним повідомленням)"
 	case "RU":
-		message = "Опишите, пожалуйста, букет, который вы хотели бы:"
+		message = "Опишите, пожалуйста, букет, который вы хотели бы создать- количество цветов, цветовая гамма букета, примерный имеющийся бюджет. 😊 (Всю указанную информацию пожалуйста отправьте одним сообщением)"
 	}
 
 	if message == "" {
@@ -401,13 +401,13 @@ func sendAdminNotification(bot *tgbotapi.BotAPI, chatID int64, lang string) {
 	var message string
 	switch lang {
 	case "DEU":
-		message = "Vielen Dank für Ihre Bestellung und die Wahl von Florgalerie😄! Der Administrator hat Ihre Bestellung erhalten und <b><i>teilt Ihnen den Preis</i></b> für den von Ihnen gewählten Strauß mit. Wir prüfen die Verfügbarkeit der ausgewählten Blumen und stellen Ihren Strauß zusammen. Um einen neuen Auftrag zu erstellen, schreiben Sie '/start'."
+		message = "Vielen Dank für Ihre Bestellung und die Wahl von Florgalerie😄! Der Administrator hat Ihre Bestellung erhalten und <b><i>teilt Ihnen den Preis</i></b> für den von Ihnen gewählten Strauß mit. Wir prüfen die Verfügbarkeit der ausgewählten Blumen und andere Details der Bestellung. Um einen neuen Auftrag zu erstellen, schreiben Sie '/start'."
 	case "EN":
-		message = "Thank you for ordering and choosing Florgalerie😄! The administrator has received your order and <b><i>tell you the price</i></b> of the bouquet you've chosen. We are checking the availability of selected flowers and pick a bouquet. To create a new order, write '/start'."
+		message = "Thank you for ordering and choosing Florgalerie😄! The administrator has received your order and <b><i>tell you the price</i></b> of the bouquet you've chosen. We check the availability of the selected flowers and other details of the order. To create a new order, write '/start'."
 	case "UK":
-		message = "Дякую Вам за зроблене замовлення і вибір Florgalerie😄! Адміністратор отримав Ваше замовлення і <b><i>підкаже вам ціну</i></b> обраного Вами букета. Перевіряємо наявність обраних квітів і збираємо букет. Для створення нового замовлення напишіть '/start'."
+		message = "Дякую Вам за зроблене замовлення і вибір Florgalerie😄! Адміністратор отримав Ваше замовлення і <b><i>підкаже вам ціну</i></b> обраного Вами букета. Перевіряємо наявність обраних квітів та інші деталі замовлення. Для створення нового замовлення напишіть '/start'."
 	case "RU":
-		message = "Благодарю Вас за сделанный заказ и выбор Florgalerie😄! Администратор получил Ваш заказ и <b><i>подскажет вам цену</i></b> выбраного Вами букета. Проверяем наличие выбранных цветов и собираем букет. Для создания нового заказа напишите '/start'."
+		message = "Благодарю Вас за сделанный заказ и выбор Florgalerie😄! Администратор получил Ваш заказ и <b><i>подскажет вам цену</i></b> выбраного Вами букета. Проверяем наличие выбранных цветов и прочие детали заказа. Для создания нового заказа напишите '/start'."
 
 	}
 	msg := tgbotapi.NewMessage(chatID, message)
