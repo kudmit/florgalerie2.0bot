@@ -418,6 +418,7 @@ func sendAdminNotification(bot *tgbotapi.BotAPI, chatID int64, lang string) {
 	bot.Send(msg)
 
 }
+var userData = make(map[int64]*UserInfo)
 
 func main() {
 	bot, err := tgbotapi.NewBotAPI("7605031210:AAGTiIboCT3mxxLO6egJ3Zhkr8LAVcdu6yo")
@@ -469,122 +470,123 @@ func main() {
 }
 
 func processUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
-	userData := make(map[int64]*UserInfo)
-
-	if update.Message == nil {
-		return
-	}
-
-	chatID := update.Message.Chat.ID
-	text := update.Message.Text
-
-	if chatID == AdminID {
-		handleAdminMessage(bot, update, userData)
-		return
-	}
-
-	if userData[chatID] == nil {
-		userData[chatID] = &UserInfo{}
-	}
-
-	userInfo := userData[chatID]
-
-	
-	if update.Message.Photo != nil {
-		photo := update.Message.Photo[len(update.Message.Photo)-1]
-		adminMessage := fmt.Sprintf("📸 Новое фото от пользователя (ID: %d):", chatID)
-		bot.Send(tgbotapi.NewMessage(AdminID, adminMessage))
-		photoMsg := tgbotapi.NewPhoto(AdminID, tgbotapi.FileID(photo.FileID))
-		bot.Send(photoMsg)
-		return
-	}
-
-	switch {
-	case text == "/start":
-		msg := tgbotapi.NewMessage(chatID, "Please select your language:")
-		msg.ReplyMarkup = tgbotapi.NewReplyKeyboard(
-			tgbotapi.NewKeyboardButtonRow(
-				tgbotapi.NewKeyboardButton("DEU"),
-				tgbotapi.NewKeyboardButton("EN"),
-				tgbotapi.NewKeyboardButton("UK"),
-				tgbotapi.NewKeyboardButton("RU"),
-			),
-		)
-		bot.Send(msg)
-
-	case text == "DEU" || text == "EN" || text == "UK" || text == "RU":
-		userInfo.Language = text
-		sendGreeting(bot, chatID, text)
-		askUserName(bot, chatID, text)
-
-	case userInfo.UserName == "":
-    if strings.Contains(text, "Остаться анонимным") || strings.Contains(text, "Stay anonymous") ||
-        strings.Contains(text, "Залишитися анонімним") || strings.Contains(text, "Anonym bleiben") {
-
-        userInfo.UserName = "Анонимный пользователь"
-
-        var anonymousMessage string
-        switch userInfo.Language {
-        case "DEU":
-            anonymousMessage = "Sie haben entschieden, anonym zu bleiben."
-        case "EN":
-            anonymousMessage = "You decided to stay anonymous."
-        case "UK":
-            anonymousMessage = "Ви вирішили залишитися анонімним."
-        case "RU":
-            anonymousMessage = "Вы решили остаться анонимным."
-        default:
-            anonymousMessage = "You decided to stay anonymous." // Default to English
-        }
-
-        msg := tgbotapi.NewMessage(chatID, anonymousMessage)
-        msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
-        if _, err := bot.Send(msg); err != nil {
-            log.Printf("Failed to send anonymous message: %v", err)
-            return
-        }
-
-        log.Printf("User chose to stay anonymous. Sending bouquet request...")
-        sendBouquetRequest(bot, chatID, userInfo.Language) // Переход к следующему шагу
-    } else {
-        userInfo.UserName = text
-
-        var greeting string
-        switch userInfo.Language {
-        case "DEU":
-            greeting = fmt.Sprintf("Freut mich, Sie kennenzulernen, %s!", userInfo.UserName)
-        case "EN":
-            greeting = fmt.Sprintf("Nice to meet you, %s!", userInfo.UserName)
-        case "UK":
-            greeting = fmt.Sprintf("Приємно познайомитися, %s!", userInfo.UserName)
-        case "RU":
-            greeting = fmt.Sprintf("Приятно познакомиться, %s!", userInfo.UserName)
-        default:
-            greeting = fmt.Sprintf("Nice to meet you, %s!", userInfo.UserName) // Default to English
-        }
-
-        msg := tgbotapi.NewMessage(chatID, greeting)
-        msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
-        if _, err := bot.Send(msg); err != nil {
-            log.Printf("Failed to send greeting message: %v", err)
-            return
-        }
-
-        log.Printf("User provided name: %s. Sending bouquet request...", userInfo.UserName)
-        sendBouquetRequest(bot, chatID, userInfo.Language) // Переход к следующему шагу
+    if update.Message == nil {
+        return
     }
-	case userInfo.Bouquet == "":
-		userInfo.Bouquet = text
-		sendOrderTimeRequest(bot, chatID, userInfo.Language)
 
-	case userInfo.OrderTime == "":
-		handleOrderTime(bot, chatID, text, userInfo.Language, userInfo)
+    chatID := update.Message.Chat.ID
+    text := update.Message.Text
 
-	case userInfo.OrderTime != "":
-		adminMessage := fmt.Sprintf(
-			"Новое сообщение от пользователя %d:\n\n📝 Имя: %s\n\n🗨️ Ваш предыдущий ответ:\n%s\n\n📝 Ответ пользователя (ID: %d):\n%s",
-			chatID, userInfo.UserName, userInfo.LastAdminMessage, chatID, text,
-		)
-		bot.Send(tgbotapi.NewMessage(AdminID, adminMessage))
-	}
+    // Если пользователь еще не существует, создаем запись
+    if _, exists := userData[chatID]; !exists {
+        userData[chatID] = &UserInfo{}
+    }
+    userInfo := userData[chatID]
+
+    // Обработка сообщений от администратора
+    if chatID == AdminID {
+        handleAdminMessage(bot, update, userData)
+        return
+    }
+
+    // Обработка фотографий
+    if update.Message.Photo != nil {
+        photo := update.Message.Photo[len(update.Message.Photo)-1]
+        adminMessage := fmt.Sprintf("📸 Новое фото от пользователя (ID: %d):", chatID)
+        bot.Send(tgbotapi.NewMessage(AdminID, adminMessage))
+        photoMsg := tgbotapi.NewPhoto(AdminID, tgbotapi.FileID(photo.FileID))
+        bot.Send(photoMsg)
+        return
+    }
+
+    // Основная логика обработки сообщений
+    switch {
+    case text == "/start":
+        msg := tgbotapi.NewMessage(chatID, "Please select your language:")
+        msg.ReplyMarkup = tgbotapi.NewReplyKeyboard(
+            tgbotapi.NewKeyboardButtonRow(
+                tgbotapi.NewKeyboardButton("DEU"),
+                tgbotapi.NewKeyboardButton("EN"),
+                tgbotapi.NewKeyboardButton("UK"),
+                tgbotapi.NewKeyboardButton("RU"),
+            ),
+        )
+        bot.Send(msg)
+
+    case text == "DEU" || text == "EN" || text == "UK" || text == "RU":
+        userInfo.Language = text
+        sendGreeting(bot, chatID, text)
+        askUserName(bot, chatID, text)
+
+    case userInfo.UserName == "":
+        if strings.Contains(text, "Остаться анонимным") || strings.Contains(text, "Stay anonymous") ||
+            strings.Contains(text, "Залишитися анонімним") || strings.Contains(text, "Anonym bleiben") {
+
+            userInfo.UserName = "Анонимный пользователь"
+
+            var anonymousMessage string
+            switch userInfo.Language {
+            case "DEU":
+                anonymousMessage = "Sie haben entschieden, anonym zu bleiben."
+            case "EN":
+                anonymousMessage = "You decided to stay anonymous."
+            case "UK":
+                anonymousMessage = "Ви вирішили залишитися анонімним."
+            case "RU":
+                anonymousMessage = "Вы решили остаться анонимным."
+            default:
+                anonymousMessage = "You decided to stay anonymous."
+            }
+
+            msg := tgbotapi.NewMessage(chatID, anonymousMessage)
+            msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+            if _, err := bot.Send(msg); err != nil {
+                log.Printf("Failed to send anonymous message: %v", err)
+                return
+            }
+
+            log.Printf("User chose to stay anonymous. Sending bouquet request...")
+            sendBouquetRequest(bot, chatID, userInfo.Language)
+        } else {
+            userInfo.UserName = text
+
+            var greeting string
+            switch userInfo.Language {
+            case "DEU":
+                greeting = fmt.Sprintf("Freut mich, Sie kennenzulernen, %s!", userInfo.UserName)
+            case "EN":
+                greeting = fmt.Sprintf("Nice to meet you, %s!", userInfo.UserName)
+            case "UK":
+                greeting = fmt.Sprintf("Приємно познайомитися, %s!", userInfo.UserName)
+            case "RU":
+                greeting = fmt.Sprintf("Приятно познакомиться, %s!", userInfo.UserName)
+            default:
+                greeting = fmt.Sprintf("Nice to meet you, %s!")
+            }
+
+            msg := tgbotapi.NewMessage(chatID, greeting)
+            msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+            if _, err := bot.Send(msg); err != nil {
+                log.Printf("Failed to send greeting message: %v", err)
+                return
+            }
+
+            log.Printf("User provided name: %s. Sending bouquet request...", userInfo.UserName)
+            sendBouquetRequest(bot, chatID, userInfo.Language)
+        }
+
+    case userInfo.Bouquet == "":
+        userInfo.Bouquet = text
+        sendOrderTimeRequest(bot, chatID, userInfo.Language)
+
+    case userInfo.OrderTime == "":
+        handleOrderTime(bot, chatID, text, userInfo.Language, userInfo)
+
+    case userInfo.OrderTime != "":
+        adminMessage := fmt.Sprintf(
+            "Новое сообщение от пользователя %d:\n\n📝 Имя: %s\n\n🗨️ Ваш предыдущий ответ:\n%s\n\n📝 Ответ пользователя (ID: %d):\n%s",
+            chatID, userInfo.UserName, userInfo.LastAdminMessage, chatID, text,
+        )
+        bot.Send(tgbotapi.NewMessage(AdminID, adminMessage))
+    }
 }
