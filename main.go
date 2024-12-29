@@ -21,30 +21,29 @@ type UserInfo struct {
 	Bouquet          string
 	OrderTime        string
 	LastAdminMessage string
-	UserName         string // Имя пользователя или "Анонимный пользователь"
+	UserName         string 
 }
 
 // Отправка информации админу
 func sendUpdatedInfoToAdmin(bot *tgbotapi.BotAPI, chatID int64, userInfo UserInfo) {
-	// Формируем кликабельный ID пользователя
 	clickableID := fmt.Sprintf("<a href=\"tg://user?id=%d\">%d</a>", chatID, chatID)
 
-	// Формируем основное сообщение со всей информацией
+	// Формируем основное сообщение со всей информацией админу
 	message := fmt.Sprintf(
 		"👤 Пользователь: %s\n🌍 Язык: %s\n📝 Имя: %s\n💐 Букет: %s\n⏰ Время заказа: %s",
-		clickableID,        // Кликабельный ID
-		userInfo.Language,  // Язык пользователя
-		userInfo.UserName,  // Имя пользователя
-		userInfo.Bouquet,   // Букет
-		userInfo.OrderTime, // Время заказа
+		clickableID,        
+		userInfo.Language,  
+		userInfo.UserName,  
+		userInfo.Bouquet,   
+		userInfo.OrderTime, 
 	)
 
-	// Отправляем основное сообщение админу
+	// Дроп сообщение админу
 	msg := tgbotapi.NewMessage(AdminID, message)
-	msg.ParseMode = "HTML" // Используем HTML для кликабельных ссылок
+	msg.ParseMode = "HTML" 
 	bot.Send(msg)
 
-	// Отправляем ID пользователя отдельно
+	// ID пользователя отдельно
 	idMessage := fmt.Sprintf(" %d", chatID)
 	bot.Send(tgbotapi.NewMessage(AdminID, idMessage))
 }
@@ -53,9 +52,9 @@ func sendUpdatedInfoToAdmin(bot *tgbotapi.BotAPI, chatID int64, userInfo UserInf
 func handleAdminMessage(bot *tgbotapi.BotAPI, update tgbotapi.Update, userData map[int64]*UserInfo) {
 	message := update.Message
 
-	// Если администратор отправил фотографию
+	// случай отправки фото
 	if message.Photo != nil {
-		parts := strings.SplitN(message.Caption, " ", 2) // Используем Caption для ID пользователя
+		parts := strings.SplitN(message.Caption, " ", 2)
 		if len(parts) < 1 {
 			bot.Send(tgbotapi.NewMessage(AdminID, "❗ Укажите ID пользователя в подписи к фото."))
 			return
@@ -68,7 +67,7 @@ func handleAdminMessage(bot *tgbotapi.BotAPI, update tgbotapi.Update, userData m
 			return
 		}
 
-		photo := message.Photo[len(message.Photo)-1] // Берём самое большое фото
+		photo := message.Photo[len(message.Photo)-1] 
 		photoMsg := tgbotapi.NewPhoto(userID, tgbotapi.FileID(photo.FileID))
 		photoMsg.Caption = "📸 Фото от администратора"
 		_, err = bot.Send(photoMsg)
@@ -163,7 +162,7 @@ func askUserName(bot *tgbotapi.BotAPI, chatID int64, lang string) {
 	bot.Send(msg)
 }
 
-// Запрос описания букета
+// описания букета
 func sendBouquetRequest(bot *tgbotapi.BotAPI, chatID int64, lang string) {
 	var message string
 	switch lang {
@@ -334,7 +333,7 @@ func handleOrderTime(bot *tgbotapi.BotAPI, chatID int64, input string, lang stri
 		return
 	}
 
-	// Проверяем, нажата ли кнопка "Получить на следующий день"
+	// чек нажата ли кнопка "Получить на следующий день"
 	if strings.Contains(input, "Получить") || strings.Contains(input, "Receive") ||
 		strings.Contains(input, "Отримати") || strings.Contains(input, "Erhalten") {
 		nextDay := currentTime.AddDate(0, 0, 1)
@@ -429,7 +428,7 @@ func main() {
 	bot.Debug = true
 	log.Printf("Authorized on account %s", bot.Self.UserName)
 
-	// Устанавливаем Webhook
+	// вебхук
 	domain := "https://florgalerie2bot.onrender.com" 
 	webhookURL := domain + "/" + bot.Token
 
@@ -442,7 +441,7 @@ func main() {
 		log.Fatalf("Failed to set webhook: %v", err)
 	}
 
-	// Обработка маршрута для Webhook
+	// маршрут хука
 	http.HandleFunc("/"+bot.Token, func(w http.ResponseWriter, r *http.Request) {
 		var update tgbotapi.Update
 		if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
