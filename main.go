@@ -13,7 +13,7 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-const AdminID int64 = 246690184
+const AdminID int64 = 1340445728
 
 // Информация о пользователе
 type UserInfo struct {
