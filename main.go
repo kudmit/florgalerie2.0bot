@@ -24,7 +24,11 @@ type UserInfo struct {
 	LastAdminMessage string
 	UserName         string 
 }
-
+func sendToAllAdmins(bot *tgbotapi.BotAPI, message string) {
+    for _, adminID := range Admins {
+        bot.Send(tgbotapi.NewMessage(adminID, message))
+    }
+}
 // Отправка информации админу
 func sendUpdatedInfoToAdmin(bot *tgbotapi.BotAPI, chatID int64, userInfo UserInfo) {
 	clickableID := fmt.Sprintf("<a href=\"tg://user?id=%d\">%d</a>", chatID, chatID)
