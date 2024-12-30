@@ -13,7 +13,8 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-const AdminID int64 = 1340445728
+var Admins = []int64{1340445728, 1414005809} 
+
 
 // Информация о пользователе
 type UserInfo struct {
@@ -45,7 +46,9 @@ func sendUpdatedInfoToAdmin(bot *tgbotapi.BotAPI, chatID int64, userInfo UserInf
 
 	// ID пользователя отдельно
 	idMessage := fmt.Sprintf(" %d", chatID)
-	bot.Send(tgbotapi.NewMessage(AdminID, idMessage))
+		for _, adminID := range Admins {
+    bot.Send(tgbotapi.NewMessage(adminID,idMessage))
+}
 }
 
 // Пересылка сообщения от администратора пользователю
@@ -56,14 +59,18 @@ func handleAdminMessage(bot *tgbotapi.BotAPI, update tgbotapi.Update, userData m
 	if message.Photo != nil {
 		parts := strings.SplitN(message.Caption, " ", 2)
 		if len(parts) < 1 {
-			bot.Send(tgbotapi.NewMessage(AdminID, "❗ Укажите ID пользователя в подписи к фото."))
+			for _, adminID := range Admins {
+    bot.Send(tgbotapi.NewMessage(adminID,"❗ Укажите ID пользователя в подписи к фото."))
+}
 			return
 		}
 
 		userIDStr := parts[0]
 		userID, err := strconv.ParseInt(userIDStr, 10, 64)
 		if err != nil {
-			bot.Send(tgbotapi.NewMessage(AdminID, "❗ Неверный формат ID пользователя в подписи."))
+			for _, adminID := range Admins {
+    bot.Send(tgbotapi.NewMessage(adminID,"❗ Неверный формат ID пользователя в подписи."))
+}
 			return
 		}
 
@@ -72,13 +79,17 @@ func handleAdminMessage(bot *tgbotapi.BotAPI, update tgbotapi.Update, userData m
 		photoMsg.Caption = "📸 Фото от администратора"
 		_, err = bot.Send(photoMsg)
 		if err != nil {
-			bot.Send(tgbotapi.NewMessage(AdminID, fmt.Sprintf("❌ Не удалось отправить фото пользователю: %v", err)))
+			for _, adminID := range Admins {
+    bot.Send(tgbotapi.NewMessage(adminID, fmt.Sprintf("❌ Не удалось отправить фото пользователю: %v", err)))
+}
 		} else {
 			// Сохраняем сообщение администратора для пользователя
 			if userInfo, exists := userData[userID]; exists {
 				userInfo.LastAdminMessage = "📸 Фото от администратора"
 			}
-			bot.Send(tgbotapi.NewMessage(AdminID, "✅ Фото отправлено пользователю."))
+				for _, adminID := range Admins {
+    bot.Send(tgbotapi.NewMessage(adminID, "✅ Фото отправлено пользователю."))
+}
 		}
 		return
 	}
@@ -87,33 +98,47 @@ func handleAdminMessage(bot *tgbotapi.BotAPI, update tgbotapi.Update, userData m
 	text := message.Text
 	parts := strings.SplitN(text, " ", 2)
 	if len(parts) < 2 {
-		bot.Send(tgbotapi.NewMessage(AdminID, "❗ Укажите ID пользователя и текст сообщения через пробел."))
+				for _, adminID := range Admins {
+    bot.Send(tgbotapi.NewMessage(adminID, "❗ Укажите ID пользователя и текст сообщения через пробел."))
+}
+		
 		return
 	}
 
 	userIDStr := parts[0]
 	userID, err := strconv.ParseInt(userIDStr, 10, 64)
 	if err != nil {
-		bot.Send(tgbotapi.NewMessage(AdminID, "❗ Неверный формат ID пользователя."))
+			for _, adminID := range Admins {
+    bot.Send(tgbotapi.NewMessage(adminID, "❗ Неверный формат ID пользователя."))
+}
 		return
 	}
 
 	messageText := parts[1]
 	if messageText == "" {
-		bot.Send(tgbotapi.NewMessage(AdminID, "❗ Текст сообщения пустой."))
+		for _, adminID := range Admins {
+    bot.Send(tgbotapi.NewMessage(adminID, "❗ Текст сообщения пустой."))
+}
+		
 		return
 	}
 
 	msg := tgbotapi.NewMessage(userID, fmt.Sprintf("🔔 Admin:\n%s", messageText))
 	_, err = bot.Send(msg)
 	if err != nil {
-		bot.Send(tgbotapi.NewMessage(AdminID, fmt.Sprintf("❌ Не удалось отправить сообщение пользователю: %v", err)))
+			for _, adminID := range Admins {
+    bot.Send(tgbotapi.NewMessage(adminID, fmt.Sprintf("❌ Не удалось отправить сообщение пользователю: %v", err)))
+}
+		
 	} else {
 		// Сохраняем текст последнего сообщения администратора
 		if userInfo, exists := userData[userID]; exists {
 			userInfo.LastAdminMessage = messageText
 		}
-		bot.Send(tgbotapi.NewMessage(AdminID, "✅ Сообщение отправлено пользователю."))
+		for _, adminID := range Admins {
+    bot.Send(tgbotapi.NewMessage(adminID,  "✅ Сообщение отправлено пользователю."))
+}
+
 	}
 }
 
@@ -492,7 +517,9 @@ func processUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
     if update.Message.Photo != nil {
         photo := update.Message.Photo[len(update.Message.Photo)-1]
         adminMessage := fmt.Sprintf("📸 Новое фото от пользователя (ID: %d):", chatID)
-        bot.Send(tgbotapi.NewMessage(AdminID, adminMessage))
+      for _, adminID := range Admins {
+    bot.Send(tgbotapi.NewMessage(adminID, adminMessage))
+}
         photoMsg := tgbotapi.NewPhoto(AdminID, tgbotapi.FileID(photo.FileID))
         bot.Send(photoMsg)
         return
@@ -586,6 +613,9 @@ func processUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
             "Новое сообщение от пользователя %d:\n\n📝 Имя: %s\n\n🗨️ Ваш предыдущий ответ:\n%s\n\n📝 Ответ пользователя (ID: %d):\n%s",
             chatID, userInfo.UserName, userInfo.LastAdminMessage, chatID, text,
         )
-        bot.Send(tgbotapi.NewMessage(AdminID, adminMessage))
+        for _, adminID := range Admins {
+    bot.Send(tgbotapi.NewMessage(adminID, adminMessage))
+}
+
     }
 }
