@@ -1,20 +1,19 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
-	"net/http"
-	"os"
-	"encoding/json"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-var Admins = []int64{1340445728, 1414005809} 
-
+var AdminIDs = []int64{1414005809, 1340445728}
 
 // Информация о пользователе
 type UserInfo struct {
@@ -22,37 +21,32 @@ type UserInfo struct {
 	Bouquet          string
 	OrderTime        string
 	LastAdminMessage string
-	UserName         string 
+	UserName         string
 }
-func sendToAllAdmins(bot *tgbotapi.BotAPI, message string) {
-    for _, adminID := range Admins {
-        bot.Send(tgbotapi.NewMessage(adminID, message))
-    }
-}
+
 // Отправка информации админу
-func sendUpdatedInfoToAdmin(bot *tgbotapi.BotAPI, chatID int64, userInfo UserInfo) {
+func sendUpdatedInfoToAdmins(bot *tgbotapi.BotAPI, chatID int64, userInfo UserInfo) {
 	clickableID := fmt.Sprintf("<a href=\"tg://user?id=%d\">%d</a>", chatID, chatID)
 
-	// Формируем основное сообщение со всей информацией админу
+	// Формируем основное сообщение со всей информацией администраторам
 	message := fmt.Sprintf(
 		"👤 Пользователь: %s\n🌍 Язык: %s\n📝 Имя: %s\n💐 Букет: %s\n⏰ Время заказа: %s",
-		clickableID,        
-		userInfo.Language,  
-		userInfo.UserName,  
-		userInfo.Bouquet,   
-		userInfo.OrderTime, 
+		clickableID,
+		userInfo.Language,
+		userInfo.UserName,
+		userInfo.Bouquet,
+		userInfo.OrderTime,
 	)
 
-	// Дроп сообщение админу
-	msg := tgbotapi.NewMessage(AdminID, message)
-	msg.ParseMode = "HTML" 
-	bot.Send(msg)
+	for _, adminID := range AdminIDs {
+		msg := tgbotapi.NewMessage(adminID, message)
+		msg.ParseMode = "HTML"
+		bot.Send(msg)
 
-	// ID пользователя отдельно
-	idMessage := fmt.Sprintf(" %d", chatID)
-		for _, adminID := range Admins {
-    bot.Send(tgbotapi.NewMessage(adminID,idMessage))
-}
+		// ID пользователя отдельно
+		idMessage := fmt.Sprintf(" %d", chatID)
+		bot.Send(tgbotapi.NewMessage(adminID, idMessage))
+	}
 }
 
 // Пересылка сообщения от администратора пользователю
@@ -63,37 +57,37 @@ func handleAdminMessage(bot *tgbotapi.BotAPI, update tgbotapi.Update, userData m
 	if message.Photo != nil {
 		parts := strings.SplitN(message.Caption, " ", 2)
 		if len(parts) < 1 {
-			for _, adminID := range Admins {
-    bot.Send(tgbotapi.NewMessage(adminID,"❗ Укажите ID пользователя в подписи к фото."))
-}
+			for _, adminID := range AdminIDs {
+				bot.Send(tgbotapi.NewMessage(adminID, "❗ Укажите ID пользователя в подписи к фото."))
+			}
 			return
 		}
 
 		userIDStr := parts[0]
 		userID, err := strconv.ParseInt(userIDStr, 10, 64)
 		if err != nil {
-			for _, adminID := range Admins {
-    bot.Send(tgbotapi.NewMessage(adminID,"❗ Неверный формат ID пользователя в подписи."))
-}
+			for _, adminID := range AdminIDs {
+				bot.Send(tgbotapi.NewMessage(adminID, "❗ Неверный формат ID пользователя в подписи."))
+			}
 			return
 		}
 
-		photo := message.Photo[len(message.Photo)-1] 
+		photo := message.Photo[len(message.Photo)-1]
 		photoMsg := tgbotapi.NewPhoto(userID, tgbotapi.FileID(photo.FileID))
 		photoMsg.Caption = "📸 Фото от администратора"
 		_, err = bot.Send(photoMsg)
 		if err != nil {
-			for _, adminID := range Admins {
-    bot.Send(tgbotapi.NewMessage(adminID, fmt.Sprintf("❌ Не удалось отправить фото пользователю: %v", err)))
-}
+			for _, adminID := range AdminIDs {
+				bot.Send(tgbotapi.NewMessage(adminID, fmt.Sprintf("❌ Не удалось отправить фото пользователю: %v", err)))
+			}
 		} else {
 			// Сохраняем сообщение администратора для пользователя
 			if userInfo, exists := userData[userID]; exists {
 				userInfo.LastAdminMessage = "📸 Фото от администратора"
 			}
-				for _, adminID := range Admins {
-    bot.Send(tgbotapi.NewMessage(adminID, "✅ Фото отправлено пользователю."))
-}
+			for _, adminID := range AdminIDs {
+				bot.Send(tgbotapi.NewMessage(adminID, "✅ Фото отправлено пользователю."))
+			}
 		}
 		return
 	}
@@ -102,47 +96,43 @@ func handleAdminMessage(bot *tgbotapi.BotAPI, update tgbotapi.Update, userData m
 	text := message.Text
 	parts := strings.SplitN(text, " ", 2)
 	if len(parts) < 2 {
-				for _, adminID := range Admins {
-    bot.Send(tgbotapi.NewMessage(adminID, "❗ Укажите ID пользователя и текст сообщения через пробел."))
-}
-		
+		for _, adminID := range AdminIDs {
+			bot.Send(tgbotapi.NewMessage(adminID, "❗ Укажите ID пользователя и текст сообщения через пробел."))
+		}
 		return
 	}
 
 	userIDStr := parts[0]
 	userID, err := strconv.ParseInt(userIDStr, 10, 64)
 	if err != nil {
-			for _, adminID := range Admins {
-    bot.Send(tgbotapi.NewMessage(adminID, "❗ Неверный формат ID пользователя."))
-}
+		for _, adminID := range AdminIDs {
+			bot.Send(tgbotapi.NewMessage(adminID, "❗ Неверный формат ID пользователя."))
+		}
 		return
 	}
 
 	messageText := parts[1]
 	if messageText == "" {
-		for _, adminID := range Admins {
-    bot.Send(tgbotapi.NewMessage(adminID, "❗ Текст сообщения пустой."))
-}
-		
+		for _, adminID := range AdminIDs {
+			bot.Send(tgbotapi.NewMessage(adminID, "❗ Текст сообщения пустой."))
+		}
 		return
 	}
 
 	msg := tgbotapi.NewMessage(userID, fmt.Sprintf("🔔 Admin:\n%s", messageText))
 	_, err = bot.Send(msg)
 	if err != nil {
-			for _, adminID := range Admins {
-    bot.Send(tgbotapi.NewMessage(adminID, fmt.Sprintf("❌ Не удалось отправить сообщение пользователю: %v", err)))
-}
-		
+		for _, adminID := range AdminIDs {
+			bot.Send(tgbotapi.NewMessage(adminID, fmt.Sprintf("❌ Не удалось отправить сообщение пользователю: %v", err)))
+		}
 	} else {
 		// Сохраняем текст последнего сообщения администратора
 		if userInfo, exists := userData[userID]; exists {
 			userInfo.LastAdminMessage = messageText
 		}
-		for _, adminID := range Admins {
-    bot.Send(tgbotapi.NewMessage(adminID,  "✅ Сообщение отправлено пользователю."))
-}
-
+		for _, adminID := range AdminIDs {
+			bot.Send(tgbotapi.NewMessage(adminID, "✅ Сообщение отправлено пользователю."))
+		}
 	}
 }
 
@@ -206,15 +196,15 @@ func sendBouquetRequest(bot *tgbotapi.BotAPI, chatID int64, lang string) {
 	}
 
 	if message == "" {
-        log.Printf("Error: Bouquet request message is empty for language: %s", lang)
-        return
-    }
+		log.Printf("Error: Bouquet request message is empty for language: %s", lang)
+		return
+	}
 
-    log.Printf("Sending bouquet request: %s", message)
-    msg := tgbotapi.NewMessage(chatID, message)
-    if _, err := bot.Send(msg); err != nil {
-        log.Printf("Failed to send bouquet request: %v", err)
-    }
+	log.Printf("Sending bouquet request: %s", message)
+	msg := tgbotapi.NewMessage(chatID, message)
+	if _, err := bot.Send(msg); err != nil {
+		log.Printf("Failed to send bouquet request: %v", err)
+	}
 }
 
 // График работы магазина
@@ -331,7 +321,7 @@ func handleNextDaySelection(bot *tgbotapi.BotAPI, chatID int64, lang string, use
 	nextDayMorning := time.Date(nextDay.Year(), nextDay.Month(), nextDay.Day(), 9, 0, 0, 0, loc)
 
 	userInfo.OrderTime = nextDayMorning.Format("02.01.2006 15:04")
-	sendUpdatedInfoToAdmin(bot, chatID, *userInfo)
+	sendUpdatedInfoToAdmins(bot, chatID, *userInfo)
 
 	var successMessage string
 	switch lang {
@@ -368,9 +358,9 @@ func handleOrderTime(bot *tgbotapi.BotAPI, chatID int64, input string, lang stri
 		nextDay := currentTime.AddDate(0, 0, 1)
 		nextDayMorning := time.Date(nextDay.Year(), nextDay.Month(), nextDay.Day(), 9, 0, 0, 0, loc)
 
-		// Сохраняем корректное время 
+		// Сохраняем корректное время
 		userInfo.OrderTime = nextDayMorning.Format("02.01.2006 15:04")
-		sendUpdatedInfoToAdmin(bot, chatID, *userInfo)
+		sendUpdatedInfoToAdmins(bot, chatID, *userInfo)
 
 		// Сообщение пользователю о сохранённом времени
 		var successMessage string
@@ -407,7 +397,7 @@ func handleOrderTime(bot *tgbotapi.BotAPI, chatID int64, input string, lang stri
 
 	// Если время корректное сохраняем его и отправляем благодарность
 	userInfo.OrderTime = parsedTime.Format("02.01.2006 15:04")
-	sendUpdatedInfoToAdmin(bot, chatID, *userInfo)
+	sendUpdatedInfoToAdmins(bot, chatID, *userInfo)
 
 	// Сообщение пользователю о сохранении времени
 	var successMessage string
@@ -446,6 +436,7 @@ func sendAdminNotification(bot *tgbotapi.BotAPI, chatID int64, lang string) {
 	bot.Send(msg)
 
 }
+
 var userData = make(map[int64]*UserInfo)
 
 func main() {
@@ -458,7 +449,7 @@ func main() {
 	log.Printf("Authorized on account %s", bot.Self.UserName)
 
 	// вебхук
-	domain := "https://florgalerie2bot.onrender.com" 
+	domain := "https://florgalerie2bot.onrender.com"
 	webhookURL := domain + "/" + bot.Token
 
 	webhookConfig, err := tgbotapi.NewWebhook(webhookURL)
@@ -478,7 +469,7 @@ func main() {
 			http.Error(w, "Bad request", http.StatusBadRequest)
 			return
 		}
-		processUpdate(bot, update) 
+		processUpdate(bot, update)
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -491,135 +482,145 @@ func main() {
 	// Старт HTTP-сервера
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080" 
+		port = "8080"
 	}
 	log.Printf("Starting server on port %s...", port)
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
+func isAdmin(chatID int64) bool {
+	for _, adminID := range AdminIDs {
+		if chatID == adminID {
+			return true
+		}
+	}
+	return false
+}
 
 func processUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
-    if update.Message == nil {
-        return
-    }
+	if update.Message == nil {
+		return
+	}
 
-    chatID := update.Message.Chat.ID
-    text := update.Message.Text
+	chatID := update.Message.Chat.ID
+	text := update.Message.Text
 
-    // Если пользователь еще не существует, создаем запись
-    if _, exists := userData[chatID]; !exists {
-        userData[chatID] = &UserInfo{}
-    }
-    userInfo := userData[chatID]
+	// Если пользователь еще не существует, создаем запись
+	if _, exists := userData[chatID]; !exists {
+		userData[chatID] = &UserInfo{}
+	}
+	userInfo := userData[chatID]
 
-    // Обработка сообщений от администратора
-    if chatID == AdminID {
-        handleAdminMessage(bot, update, userData)
-        return
-    }
+	// Обработка сообщений от администратора
+	if isAdmin(chatID) {
+		handleAdminMessage(bot, update, userData)
+		return
+	}
 
-    // Обработка фотографий
-    if update.Message.Photo != nil {
-        photo := update.Message.Photo[len(update.Message.Photo)-1]
-        adminMessage := fmt.Sprintf("📸 Новое фото от пользователя (ID: %d):", chatID)
-      for _, adminID := range Admins {
-    bot.Send(tgbotapi.NewMessage(adminID, adminMessage))
-}
-        photoMsg := tgbotapi.NewPhoto(AdminID, tgbotapi.FileID(photo.FileID))
-        bot.Send(photoMsg)
-        return
-    }
+	// Обработка фотографий
+	if update.Message.Photo != nil {
+		photo := update.Message.Photo[len(update.Message.Photo)-1]
+		adminMessage := fmt.Sprintf("📸 Новое фото от пользователя (ID: %d):", chatID)
+		for _, adminID := range AdminIDs {
+			bot.Send(tgbotapi.NewMessage(adminID, adminMessage))
 
-    // Основная логика обработки сообщений
-    switch {
-    case text == "/start":
-        msg := tgbotapi.NewMessage(chatID, "Please select your language:")
-        msg.ReplyMarkup = tgbotapi.NewReplyKeyboard(
-            tgbotapi.NewKeyboardButtonRow(
-                tgbotapi.NewKeyboardButton("DEU"),
-                tgbotapi.NewKeyboardButton("EN"),
-                tgbotapi.NewKeyboardButton("UK"),
-                tgbotapi.NewKeyboardButton("RU"),
-            ),
-        )
-        bot.Send(msg)
+			photoMsg := tgbotapi.NewPhoto(adminID, tgbotapi.FileID(photo.FileID))
+			bot.Send(photoMsg)
+		}
 
-    case text == "DEU" || text == "EN" || text == "UK" || text == "RU":
-        userInfo.Language = text
-        sendGreeting(bot, chatID, text)
-        askUserName(bot, chatID, text)
+		return
+	}
 
-    case userInfo.UserName == "":
-        if strings.Contains(text, "Остаться анонимным") || strings.Contains(text, "Stay anonymous") ||
-            strings.Contains(text, "Залишитися анонімним") || strings.Contains(text, "Anonym bleiben") {
+	// Основная логика обработки сообщений
+	switch {
+	case text == "/start":
+		msg := tgbotapi.NewMessage(chatID, "Please select your language:")
+		msg.ReplyMarkup = tgbotapi.NewReplyKeyboard(
+			tgbotapi.NewKeyboardButtonRow(
+				tgbotapi.NewKeyboardButton("DEU"),
+				tgbotapi.NewKeyboardButton("EN"),
+				tgbotapi.NewKeyboardButton("UK"),
+				tgbotapi.NewKeyboardButton("RU"),
+			),
+		)
+		bot.Send(msg)
 
-            userInfo.UserName = "Анонимный пользователь"
+	case text == "DEU" || text == "EN" || text == "UK" || text == "RU":
+		userInfo.Language = text
+		sendGreeting(bot, chatID, text)
+		askUserName(bot, chatID, text)
 
-            var anonymousMessage string
-            switch userInfo.Language {
-            case "DEU":
-                anonymousMessage = "Sie haben entschieden, anonym zu bleiben."
-            case "EN":
-                anonymousMessage = "You decided to stay anonymous."
-            case "UK":
-                anonymousMessage = "Ви вирішили залишитися анонімним."
-            case "RU":
-                anonymousMessage = "Вы решили остаться анонимным."
-            default:
-                anonymousMessage = "You decided to stay anonymous."
-            }
+	case userInfo.UserName == "":
+		if strings.Contains(text, "Остаться анонимным") || strings.Contains(text, "Stay anonymous") ||
+			strings.Contains(text, "Залишитися анонімним") || strings.Contains(text, "Anonym bleiben") {
 
-            msg := tgbotapi.NewMessage(chatID, anonymousMessage)
-            msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
-            if _, err := bot.Send(msg); err != nil {
-                log.Printf("Failed to send anonymous message: %v", err)
-                return
-            }
+			userInfo.UserName = "Анонимный пользователь"
 
-            log.Printf("User chose to stay anonymous. Sending bouquet request...")
-            sendBouquetRequest(bot, chatID, userInfo.Language)
-        } else {
-            userInfo.UserName = text
+			var anonymousMessage string
+			switch userInfo.Language {
+			case "DEU":
+				anonymousMessage = "Sie haben entschieden, anonym zu bleiben."
+			case "EN":
+				anonymousMessage = "You decided to stay anonymous."
+			case "UK":
+				anonymousMessage = "Ви вирішили залишитися анонімним."
+			case "RU":
+				anonymousMessage = "Вы решили остаться анонимным."
+			default:
+				anonymousMessage = "You decided to stay anonymous."
+			}
 
-            var greeting string
-            switch userInfo.Language {
-            case "DEU":
-                greeting = fmt.Sprintf("Freut mich, Sie kennenzulernen, %s!", userInfo.UserName)
-            case "EN":
-                greeting = fmt.Sprintf("Nice to meet you, %s!", userInfo.UserName)
-            case "UK":
-                greeting = fmt.Sprintf("Приємно познайомитися, %s!", userInfo.UserName)
-            case "RU":
-                greeting = fmt.Sprintf("Приятно познакомиться, %s!", userInfo.UserName)
-            default:
-                greeting = fmt.Sprintf("Nice to meet you, %s!")
-            }
+			msg := tgbotapi.NewMessage(chatID, anonymousMessage)
+			msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+			if _, err := bot.Send(msg); err != nil {
+				log.Printf("Failed to send anonymous message: %v", err)
+				return
+			}
 
-            msg := tgbotapi.NewMessage(chatID, greeting)
-            msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
-            if _, err := bot.Send(msg); err != nil {
-                log.Printf("Failed to send greeting message: %v", err)
-                return
-            }
+			log.Printf("User chose to stay anonymous. Sending bouquet request...")
+			sendBouquetRequest(bot, chatID, userInfo.Language)
+		} else {
+			userInfo.UserName = text
 
-            log.Printf("User provided name: %s. Sending bouquet request...", userInfo.UserName)
-            sendBouquetRequest(bot, chatID, userInfo.Language)
-        }
+			var greeting string
+			switch userInfo.Language {
+			case "DEU":
+				greeting = fmt.Sprintf("Freut mich, Sie kennenzulernen, %s!", userInfo.UserName)
+			case "EN":
+				greeting = fmt.Sprintf("Nice to meet you, %s!", userInfo.UserName)
+			case "UK":
+				greeting = fmt.Sprintf("Приємно познайомитися, %s!", userInfo.UserName)
+			case "RU":
+				greeting = fmt.Sprintf("Приятно познакомиться, %s!", userInfo.UserName)
+			default:
+				greeting = fmt.Sprintf("Nice to meet you, %s!")
+			}
 
-    case userInfo.Bouquet == "":
-        userInfo.Bouquet = text
-        sendOrderTimeRequest(bot, chatID, userInfo.Language)
+			msg := tgbotapi.NewMessage(chatID, greeting)
+			msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+			if _, err := bot.Send(msg); err != nil {
+				log.Printf("Failed to send greeting message: %v", err)
+				return
+			}
 
-    case userInfo.OrderTime == "":
-        handleOrderTime(bot, chatID, text, userInfo.Language, userInfo)
+			log.Printf("User provided name: %s. Sending bouquet request...", userInfo.UserName)
+			sendBouquetRequest(bot, chatID, userInfo.Language)
+		}
 
-    case userInfo.OrderTime != "":
-        adminMessage := fmt.Sprintf(
-            "Новое сообщение от пользователя %d:\n\n📝 Имя: %s\n\n🗨️ Ваш предыдущий ответ:\n%s\n\n📝 Ответ пользователя (ID: %d):\n%s",
-            chatID, userInfo.UserName, userInfo.LastAdminMessage, chatID, text,
-        )
-        for _, adminID := range Admins {
-    bot.Send(tgbotapi.NewMessage(adminID, adminMessage))
-}
+	case userInfo.Bouquet == "":
+		userInfo.Bouquet = text
+		sendOrderTimeRequest(bot, chatID, userInfo.Language)
 
-    }
+	case userInfo.OrderTime == "":
+		handleOrderTime(bot, chatID, text, userInfo.Language, userInfo)
+
+	case userInfo.OrderTime != "":
+		adminMessage := fmt.Sprintf(
+			"Новое сообщение от пользователя %d:\n\n📝 Имя: %s\n\n🗨️ Ваш предыдущий ответ:\n%s\n\n📝 Ответ пользователя (ID: %d):\n%s",
+			chatID, userInfo.UserName, userInfo.LastAdminMessage, chatID, text,
+		)
+		for _, adminID := range AdminIDs {
+			bot.Send(tgbotapi.NewMessage(adminID, adminMessage))
+		}
+
+	}
 }
